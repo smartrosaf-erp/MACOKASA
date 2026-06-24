@@ -1067,12 +1067,14 @@ tr:last-child td {
 }
 
 .member-photo {
+  position: relative;
   display: grid;
   place-items: center;
   width: 62px;
   height: 78px;
   border: 2px solid rgba(255, 255, 255, 0.74);
   border-radius: 7px;
+  overflow: hidden;
   background:
     linear-gradient(135deg, rgba(255,255,255,.18), rgba(255,255,255,.05)),
     color-mix(in srgb, var(--card-color, var(--green)) 72%, black 28%);
@@ -1086,8 +1088,39 @@ tr:last-child td {
   text-shadow: 0 2px 8px rgba(0,0,0,.3);
 }
 
-.member-photo.has-image span {
+.member-photo.has-image .member-initials {
   display: none;
+}
+
+.photo-flag {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: block;
+  height: 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.72);
+  background:
+    linear-gradient(
+      to bottom,
+      #000 0 33.333%,
+      #d21034 33.333% 66.666%,
+      #007a3d 66.666% 100%
+    );
+  box-shadow: 0 -2px 8px rgba(15, 23, 42, 0.16);
+}
+
+.flag-sun {
+  position: absolute;
+  left: 50%;
+  top: 1px;
+  width: 12px;
+  height: 6px;
+  border-radius: 12px 12px 0 0;
+  transform: translateX(-50%);
+  background:
+    radial-gradient(circle at center bottom, #d21034 0 36%, transparent 37%),
+    repeating-conic-gradient(from 180deg at 50% 100%, #d21034 0 8deg, transparent 8deg 15deg);
 }
 
 .id-card-details {

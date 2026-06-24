@@ -1578,7 +1578,8 @@ function cardPreview(operator, card) {
           </div>
           <div class="id-card-body">
             <div class="member-photo has-image" data-card-photo-preview style="background-image:url('./assets/member-photo-placeholder.png')">
-              <span>${initials(operator.fullName)}</span>
+              <span class="member-initials">${initials(operator.fullName)}</span>
+              <span class="photo-flag" aria-label="Malawi flag"><span class="flag-sun" aria-hidden="true"></span></span>
             </div>
             <div class="id-card-details">
               <h3 data-card-name>${escapeHtml(operator.fullName)}</h3>
@@ -1665,7 +1666,7 @@ function updateCardPreviewFromForm() {
   setText("[data-card-area]", values.cardArea || "Operating area");
   setText("[data-card-district]", values.cardDistrict || "District");
   setText("[data-card-sex]", values.cardSex || "Sex");
-  const photo = document.querySelector("[data-card-photo-preview] span");
+  const photo = document.querySelector("[data-card-photo-preview] .member-initials");
   if (photo) photo.textContent = initials(values.cardName || "Member");
 }
 
