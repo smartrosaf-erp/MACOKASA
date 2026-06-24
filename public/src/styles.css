@@ -24,7 +24,7 @@ body {
     linear-gradient(180deg, rgba(16, 185, 31, 0.06), transparent 220px),
     var(--soft);
   color: var(--ink);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Trebuchet MS", Arial, sans-serif;
 }
 
 button,
@@ -54,6 +54,29 @@ button {
   border-bottom: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(14px);
+}
+
+.site-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 6px;
+}
+
+.site-nav button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--charcoal);
+  padding: 0 10px;
+  font-weight: 800;
+}
+
+.site-nav button:hover {
+  background: #e7f8ec;
+  color: var(--green-dark);
 }
 
 .brand {
@@ -243,7 +266,7 @@ button {
 .hero-main h1 {
   max-width: 760px;
   margin: 10px 0 14px;
-  font-size: clamp(32px, 5vw, 58px);
+  font-size: clamp(30px, 4vw, 48px);
   line-height: 1.03;
   letter-spacing: 0;
 }
@@ -339,8 +362,9 @@ button {
   width: 42px;
   height: 42px;
   border-radius: 8px;
-  color: white;
-  background: linear-gradient(135deg, var(--red), var(--yellow), var(--green), var(--blue));
+  color: var(--green-dark);
+  background: #e7f8ec;
+  border: 1px solid #bdebc8;
 }
 
 .metric-icon svg {
@@ -468,6 +492,7 @@ tr:last-child td {
   color: var(--green-dark);
   border: 1px solid #bdebc8;
   font-weight: 800;
+  text-decoration: none;
 }
 
 .brand-chip.outline {
@@ -493,6 +518,13 @@ tr:last-child td {
   margin: 0;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.catalogue-grid,
+.meeting-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .plan-grid {
@@ -546,7 +578,7 @@ tr:last-child td {
 
 .card-preview-layout {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(360px, 1fr);
+  grid-template-columns: minmax(260px, 330px) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
@@ -560,63 +592,123 @@ tr:last-child td {
 
 .card-preview {
   display: grid;
-  grid-template-columns: minmax(320px, 420px) 1fr;
-  gap: 16px;
+  gap: 10px;
+  align-items: start;
+}
+
+.card-stack {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 300px));
+  gap: 12px;
   align-items: start;
 }
 
 .id-card {
-  width: min(100%, 420px);
+  width: min(100%, 300px);
   aspect-ratio: 1.586 / 1;
-  border-radius: 14px;
-  border: 1px solid #0f172a;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.42);
   overflow: hidden;
   color: white;
   background:
-    linear-gradient(135deg, rgba(17, 24, 39, 0.98), color-mix(in srgb, var(--card-color, var(--green)) 82%, black 18%)),
+    linear-gradient(135deg, rgba(17, 24, 39, 0.96), color-mix(in srgb, var(--card-color, var(--green)) 72%, black 28%)),
     #111827;
-  box-shadow: 0 22px 40px rgba(15, 23, 42, 0.24);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.18);
+}
+
+.id-card.plan-silver,
+.id-card.plan-platinum {
+  color: #111827;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), color-mix(in srgb, var(--card-color) 86%, #6b7280 14%)),
+    var(--card-color);
+}
+
+.id-card.plan-gold {
+  color: #111827;
+  background:
+    linear-gradient(135deg, #fff8d2, #f4c400 72%, #a16207),
+    var(--yellow);
+}
+
+.id-card.plan-regular {
+  background:
+    linear-gradient(135deg, #0f172a, #078322 76%, #10b91f),
+    var(--green);
 }
 
 .id-card-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+  gap: 7px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.24);
 }
 
 .id-card-top img {
-  width: 96px;
-  height: 58px;
+  width: 58px;
+  height: 40px;
   object-fit: contain;
   background: white;
-  border-radius: 8px;
-  padding: 4px;
+  border-radius: 6px;
+  padding: 3px;
+  flex: 0 0 auto;
+}
+
+.id-card-top strong,
+.id-card-back-head strong {
+  display: block;
+  font-size: 11px;
+  line-height: 1.05;
+  letter-spacing: 0;
+}
+
+.id-card-top small,
+.id-card-back-head span {
+  display: block;
+  margin-top: 2px;
+  color: currentColor;
+  opacity: .78;
+  font-size: 8px;
+  line-height: 1.15;
+}
+
+.card-tier {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #111827;
+  padding: 0 8px;
+  font-size: 9px;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .id-card-body {
   display: grid;
-  grid-template-columns: 86px 1fr 105px;
-  gap: 12px;
-  padding: 14px;
+  grid-template-columns: 62px minmax(0, 1fr) 76px;
+  gap: 7px;
+  padding: 8px 10px 10px;
 }
 
 .member-photo {
   display: grid;
   place-items: center;
-  width: 86px;
-  height: 106px;
+  width: 62px;
+  height: 78px;
   border: 2px solid rgba(255, 255, 255, 0.74);
-  border-radius: 8px;
+  border-radius: 7px;
   background:
     linear-gradient(135deg, rgba(255,255,255,.18), rgba(255,255,255,.05)),
     color-mix(in srgb, var(--card-color, var(--green)) 72%, black 28%);
   background-size: cover;
   background-position: center;
   font-weight: 900;
-  font-size: 28px;
+  font-size: 18px;
 }
 
 .member-photo span {
@@ -632,42 +724,172 @@ tr:last-child td {
 }
 
 .id-card-body h3 {
-  margin: 0 0 8px;
-  font-size: 23px;
+  margin: 0 0 4px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  line-height: 1.02;
 }
 
 .id-field {
   display: grid;
-  gap: 2px;
-  margin-top: 5px;
+  gap: 1px;
+  margin-top: 2px;
+  min-width: 0;
 }
 
 .id-field span {
-  color: rgba(255, 255, 255, 0.68);
-  font-size: 10px;
+  color: currentColor;
+  opacity: .68;
+  font-size: 7px;
   text-transform: uppercase;
   font-weight: 800;
 }
 
 .id-field strong {
-  font-size: 13px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 9px;
+  line-height: 1.05;
+}
+
+.id-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(42px, .5fr);
+  gap: 4px;
 }
 
 .qr-box {
   display: grid;
   place-items: center;
-  min-height: 105px;
-  border-radius: 8px;
+  width: 70px;
+  height: 70px;
+  border-radius: 7px;
   background: white;
   color: #111827;
-  padding: 6px;
+  padding: 2px;
   text-align: center;
   overflow: hidden;
 }
 
-.qr-box canvas {
+.qr-box canvas,
+.qr-box img {
   max-width: 100%;
   height: auto !important;
+}
+
+.qr-link {
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+
+.qr-link strong {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #111827;
+  padding: 2px 8px;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.id-card-back {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 10px;
+}
+
+.id-card-back-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.id-card-back-head img {
+  width: 54px;
+  height: 38px;
+  object-fit: contain;
+  background: white;
+  border-radius: 6px;
+  padding: 3px;
+  flex: 0 0 auto;
+}
+
+.back-message {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-height: 0;
+  padding: 8px 0;
+}
+
+.back-message strong {
+  font-size: 12px;
+  line-height: 1.1;
+}
+
+.back-message p {
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.back-strip,
+.card-preview-info,
+.verification-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.back-strip {
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid currentColor;
+  padding-top: 7px;
+  font-size: 8px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.card-preview-info {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 612px;
+}
+
+.card-preview-info div,
+.verification-grid div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+  padding: 9px;
+}
+
+.card-preview-info strong,
+.verification-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.card-preview-info span,
+.verification-grid strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.verification-panel {
+  margin-bottom: 18px;
+  border-left: 6px solid var(--green);
+}
+
+.verification-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .login-panel {
@@ -786,7 +1008,8 @@ tr:last-child td {
   .hero,
   .card-preview,
   .card-preview-layout,
-  .donut-wrap {
+  .donut-wrap,
+  .verification-grid {
     grid-template-columns: 1fr;
   }
 
@@ -812,15 +1035,23 @@ tr:last-child td {
 
 @media (max-width: 720px) {
   .topbar,
+  .site-nav,
   .top-actions,
   .panel-header,
   .table-header,
   .form-header,
   .login-grid,
   .form-grid,
+  .catalogue-grid,
+  .meeting-grid,
+  .card-preview-info,
   .paychangu-box {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .site-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .workspace {
@@ -839,8 +1070,8 @@ tr:last-child td {
   }
 
   .brand img {
-    width: 92px;
-    height: 68px;
+    width: 78px;
+    height: 58px;
   }
 
   .sidebar {
@@ -858,7 +1089,7 @@ tr:last-child td {
   }
 
   .id-card {
-    width: 100%;
+    width: min(100%, 300px);
     min-width: 0;
   }
 
@@ -868,8 +1099,8 @@ tr:last-child td {
   }
 
   .id-card-top img {
-    width: 64px;
-    height: 44px;
+    width: 54px;
+    height: 38px;
   }
 
   .id-card-top strong {
@@ -881,19 +1112,19 @@ tr:last-child td {
   }
 
   .id-card-body {
-    grid-template-columns: 64px 1fr 76px;
+    grid-template-columns: 60px 1fr 72px;
     gap: 7px;
     padding: 8px;
   }
 
   .member-photo {
-    width: 64px;
-    height: 80px;
-    font-size: 20px;
+    width: 60px;
+    height: 76px;
+    font-size: 18px;
   }
 
   .id-card-body h3 {
-    font-size: 16px;
+    font-size: 14px;
     margin-bottom: 4px;
   }
 
@@ -902,16 +1133,17 @@ tr:last-child td {
   }
 
   .id-field span {
-    font-size: 8px;
+    font-size: 7px;
   }
 
   .id-field strong {
-    font-size: 10px;
+    font-size: 9px;
   }
 
   .qr-box {
-    min-height: 76px;
-    padding: 4px;
+    width: 66px;
+    height: 66px;
+    padding: 2px;
   }
 
   .chart-row {

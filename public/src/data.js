@@ -46,7 +46,7 @@ export const membershipPlans = [
     name: "Silver",
     audience: "Operator",
     annualFee: 30000,
-    color: "#0ea5e9",
+    color: "#b8c0cc",
     benefits: ["All Regular benefits", "Priority ID card queue", "Safety compliance badge", "Owner matching visibility"]
   },
   {
@@ -62,7 +62,7 @@ export const membershipPlans = [
     name: "Platinum",
     audience: "Operator",
     annualFee: 90000,
-    color: "#e31d24",
+    color: "#e5e4e2",
     benefits: ["All Gold benefits", "Tracker installation eligibility", "Fleet-owner priority matching", "Premium digital profile"]
   },
   {
@@ -83,7 +83,7 @@ export const membershipPlans = [
   }
 ];
 
-export const paymentMethods = ["PayChangu Mobile Money", "PayChangu Bank Card", "Bank Transfer", "Cash"];
+export const paymentMethods = ["AirtelMoney via PayChangu", "Mpamba via PayChangu", "Bank Card via PayChangu", "Bank Transfer", "Cash"];
 export const reminderDays = [28, 14, 7, 3, 2, 1];
 
 export const affiliatedMembers = ["ROSAF", "KATAMAS", "KAMA"];
@@ -94,6 +94,8 @@ export const demoState = {
     estimatedFleet: 2800000,
     reportedMotorcycles: 2578909,
     registeredOperators: 7912,
+    registeredMotorcycles: 6840,
+    subscribedOwners: 1265,
     targetRegistrationShare: 70,
     districtsReached: 7,
     trainingPartners: ["ROSAF", "Lilongwe City Council", "Malawi Police Service", "City councils", "Printing partners"]
@@ -246,7 +248,7 @@ export const demoState = {
       payerName: "Joseph Banda",
       payerType: "operator",
       membershipNumber: "MCK-LL-2026-0001",
-      method: "PayChangu Mobile Money",
+      method: "AirtelMoney via PayChangu",
       amount: 55000,
       purpose: "Gold annual subscription",
       collectorName: "",

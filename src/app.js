@@ -14,8 +14,8 @@ let pendingRole = "";
 let state = loadState();
 
 const navItems = [
-  ["public", "Public website", iconHome, ["public", "owner", "staff", "printing"]],
-  ["registration", "Public registration", iconUserPlus, ["public", "owner", "staff"]],
+  ["public", "Home", iconMotorcycle, ["public", "owner", "staff", "printing"]],
+  ["registration", "Public registration", iconRegistry, ["public", "owner", "staff"]],
   ["staff", "Staff ERP dashboard", iconDashboard, ["staff"]],
   ["operators", "Operator database", iconRegistry, ["staff"]],
   ["membership", "Membership and reminders", iconBell, ["staff"]],
@@ -121,6 +121,14 @@ function render() {
             <span>Kabaza operator and stakeholder management</span>
           </div>
         </div>
+        ${activeRole === "public" ? `
+          <nav class="site-nav" aria-label="Website navigation">
+            <button type="button" data-jump="catalogue">Catalogue</button>
+            <button type="button" data-jump="about">About us</button>
+            <button type="button" data-section="registration">Public registration</button>
+            <button type="button" data-section="analytics">Impact analytics</button>
+          </nav>
+        ` : ""}
         <div class="top-actions">
           <select class="role-switcher" data-role-switcher aria-label="Current portal role">
             ${roleOption("public", "Public visitor")}
@@ -205,11 +213,46 @@ function renderPortalLogin() {
   `;
 }
 
+function verificationPanelFromQuery() {
+  const token = parseVerificationToken(new URLSearchParams(window.location.search).get("verify") || "");
+  if (!token) return "";
+  const result = verifyCardToken(token);
+  if (!result.card) {
+    return `
+      <section class="panel verification-panel">
+        <div class="panel-header">
+          <div><p class="eyebrow">Card verification</p><h2>Card not recognized</h2></div>
+          <span class="status red">Fake or unknown</span>
+        </div>
+        <p class="footer-note">This QR token is not active in the MACOKASA IMS. Ask the operator to visit MACOKASA for verification.</p>
+      </section>
+    `;
+  }
+  const tone = result.card.status === "active" ? "green" : "red";
+  return `
+    <section class="panel verification-panel">
+      <div class="panel-header">
+        <div><p class="eyebrow">Card verification</p><h2>${escapeHtml(result.operator?.fullName || "MACOKASA member")}</h2></div>
+        <span class="status ${tone}">${escapeHtml(result.card.status)}</span>
+      </div>
+      <div class="verification-grid">
+        <div><span>Membership number</span><strong>${escapeHtml(result.operator?.membershipNumber || "")}</strong></div>
+        <div><span>Membership class</span><strong>${escapeHtml(planByKey(result.card.membershipPlan)?.name || result.card.membershipPlan)}</strong></div>
+        <div><span>District</span><strong>${escapeHtml(result.operator?.district || "")}</strong></div>
+        <div><span>Operating area</span><strong>${escapeHtml(result.operator?.operatingArea || "")}</strong></div>
+        <div><span>Plate</span><strong>${escapeHtml(result.operator?.licensePlate || "Not recorded")}</strong></div>
+        <div><span>Card number</span><strong>${escapeHtml(result.card.cardNumber || "")}</strong></div>
+      </div>
+      ${result.card.replacedBy ? `<p class="footer-note">This card was replaced by ${escapeHtml(result.card.replacedBy)} and should not be accepted as active.</p>` : ""}
+    </section>
+  `;
+}
+
 function renderPublicWebsite() {
   const impact = state.impact;
-  const registeredShare = ((impact.registeredOperators / impact.reportedMotorcycles) * 100).toFixed(2);
-  const femaleShare = participationShare("Female");
+  const verification = verificationPanelFromQuery();
   return `
+    ${verification}
     <section class="hero">
       <div class="hero-main">
         <p class="eyebrow">Malawi Coalition for Kabaza Stakeholders Association</p>
@@ -220,7 +263,7 @@ function renderPublicWebsite() {
         </p>
         <div class="hero-actions">
           <button class="primary-btn" type="button" data-section="registration">Register membership</button>
-          <button class="quiet-btn" type="button" data-section="analytics">View public impact</button>
+          <button class="quiet-btn" type="button" data-section="analytics">Impact analytics</button>
           <button class="quiet-btn" type="button" data-action="donate">Donate to safety work</button>
         </div>
       </div>
@@ -237,14 +280,13 @@ function renderPublicWebsite() {
       </aside>
     </section>
     <section class="grid">
-      ${metric("Estimated active fleet", compactNumber(impact.estimatedFleet), "Planning baseline from your brief and public reporting")}
-      ${metric("Reported motorcycles", compactNumber(impact.reportedMotorcycles), "Published figure used to size the registration gap")}
-      ${metric("Registered operators", compactNumber(impact.registeredOperators), `${registeredShare}% registration baseline`)}
-      ${metric("Female participation", `${femaleShare}%`, "Tracked from membership registration")}
-      <div class="panel span-8">
+      ${metric("Registered operators", compactNumber(impact.registeredOperators), "MACOKASA operator membership records", "span-4")}
+      ${metric("Registered motorcycles", compactNumber(impact.registeredMotorcycles), "Motorcycles mapped into the MACOKASA IMS", "span-4")}
+      ${metric("Subscribed owners", compactNumber(impact.subscribedOwners), "Motorcycle owners using MACOKASA IMS", "span-4")}
+      <div class="panel span-8" id="about">
         <div class="panel-header">
           <div>
-            <p class="eyebrow">Public mission</p>
+            <p class="eyebrow">About us</p>
             <h2>MACOKASA national coordination</h2>
           </div>
           <span class="status green">Verified membership drive</span>
@@ -257,16 +299,32 @@ function renderPublicWebsite() {
       </div>
       <div class="panel span-4">
         <h2>Affiliated members</h2>
-        <div class="chip-grid">${affiliatedMembers.map((name) => `<span class="brand-chip">${escapeHtml(name)}</span>`).join("")}</div>
+        <div class="chip-grid">${affiliatedMembers.map((name) => name === "ROSAF" ? `<a class="brand-chip" href="https://www.rosaf.org" target="_blank" rel="noreferrer">${escapeHtml(name)}</a>` : `<span class="brand-chip">${escapeHtml(name)}</span>`).join("")}</div>
         <h2 style="margin-top:18px">Stakeholders</h2>
         <div class="chip-grid">${stakeholders.map((name) => `<span class="brand-chip outline">${escapeHtml(name)}</span>`).join("")}</div>
       </div>
+      <div class="panel span-12" id="catalogue">
+        <div class="panel-header">
+          <div><p class="eyebrow">Catalogue</p><h2>Services offered through MACOKASA IMS</h2></div>
+          <span class="status">Member services</span>
+        </div>
+        <div class="catalogue-grid">
+          <div class="record-card"><strong>Operator membership</strong><span>Regular, Silver, Gold, and Platinum annual memberships with digital reminders and QR card verification.</span></div>
+          <div class="record-card"><strong>Owner subscription</strong><span>Motorcycle owners can subscribe, map motorcycles, find verified operators, and manage agreements from the owner portal.</span></div>
+          <div class="record-card"><strong>Safety and licensing</strong><span>ROSAF-linked licence facilitation, refresher training support, helmets, plates, and safer-rank promotion.</span></div>
+          <div class="record-card"><strong>Card verification</strong><span>QR cards can be scanned by police, passengers, rank chairs, owners, and MACOKASA staff to check live membership status.</span></div>
+        </div>
+      </div>
       <div class="panel span-8">
         <div class="panel-header">
-          <div><p class="eyebrow">Participation dashboard</p><h2>Member profile by sex</h2></div>
-          <span class="status">${state.operators.length} records</span>
+          <div><p class="eyebrow">Impact story</p><h2>How owners benefit from MACOKASA IMS</h2></div>
+          <span class="status green">Owner confidence</span>
         </div>
-        ${donutChart(sexCounts(), "Sex participation")}
+        <div class="split-list">
+          <div class="record-card"><strong>Better operator matching</strong><span>Owners can identify verified operators, map bikes to riders, and reduce uncertainty when assigning motorcycles.</span></div>
+          <div class="record-card"><strong>Clear agreements</strong><span>Monthly-pay and target-based arrangements are recorded in the owner portal so disputes can be handled with better evidence.</span></div>
+          <div class="record-card"><strong>Business visibility</strong><span>Owners see motorcycle performance, complaints, safety status, and operator behavior patterns without MACOKASA holding their money.</span></div>
+        </div>
       </div>
       <div class="panel span-4">
         <h2>Portal access</h2>
@@ -276,13 +334,25 @@ function renderPublicWebsite() {
           <button class="quiet-btn" type="button" data-role="printing">Printing authority</button>
         </div>
       </div>
+      <div class="panel span-8">
+        <div class="panel-header">
+          <div><p class="eyebrow">Stakeholder meetings</p><h2>Government and public safety coordination</h2></div>
+          <span class="status">National engagement</span>
+        </div>
+        <div class="meeting-grid">
+          <div class="record-card"><strong>DRTSS road safety sessions</strong><span>Licence compliance, operator registration, roadworthiness, and safer-rank promotion.</span></div>
+          <div class="record-card"><strong>Malawi Police Service engagement</strong><span>Card verification, complaint tracking, passenger security, and enforcement support at ranks.</span></div>
+          <div class="record-card"><strong>Local government meetings</strong><span>District-level mapping, rank organization, motorcycle owner participation, and public awareness campaigns.</span></div>
+          <div class="record-card"><strong>Ministry of Transport dialogue</strong><span>National formalization, training pathways, stakeholder accountability, and sector data reporting.</span></div>
+        </div>
+      </div>
       <div class="panel span-4">
         <h2>Donation window</h2>
         <p class="footer-note">Public donations can be routed to helmet campaigns, training support, safer-rank promotion, or data collection.</p>
         <form class="form-grid" data-form="donation">
           <label class="field full"><span>Donor name</span><input class="input-control" name="donorName" required value="Road safety supporter" /></label>
           <label class="field"><span>Amount MWK</span><input class="input-control" type="number" name="amount" min="1" required value="50000" /></label>
-          <label class="field"><span>Method</span>${select("method", paymentMethods, "PayChangu Mobile Money")}</label>
+          <label class="field"><span>Method</span>${select("method", paymentMethods, "AirtelMoney via PayChangu")}</label>
           <label class="field full"><span>Purpose</span><input class="input-control" name="purpose" value="Helmet safety campaign" /></label>
           <button class="primary-btn" type="submit">Record donation</button>
         </form>
@@ -329,7 +399,7 @@ function renderRegistration() {
         ${operatorTable(state.operators.slice(0, 5))}
       </div>
       <div class="panel span-12">
-        <div class="table-header"><h2>PayChangu membership payment</h2><span class="status">Mobile Money and Card</span></div>
+        <div class="table-header"><h2>PayChangu gateway payment</h2><span class="status">AirtelMoney, Mpamba, Card</span></div>
         ${payChanguCheckout({
           amount: 15000,
           payerName: "New MACOKASA member",
@@ -362,7 +432,7 @@ function renderStaffDashboard() {
           <span class="status green">Operational</span>
         </div>
         <div class="split-list">
-          <div class="record-card"><strong>Finance control</strong><span>PayChangu Mobile Money, PayChangu Bank Card, bank transfers, and cash records are captured. Cash payments require collector name until deposit reconciliation.</span></div>
+          <div class="record-card"><strong>Finance control</strong><span>AirtelMoney, Mpamba, and card payments are routed through PayChangu gateway. Bank transfers and cash records are also captured, with cash collector accountability until deposit reconciliation.</span></div>
           <div class="record-card"><strong>Safety control</strong><span>${unlicensed} operator(s) still need licence support. Helmet, passenger helmet, plate, and tracker status are tracked.</span></div>
           <div class="record-card"><strong>Card control</strong><span>${activeCards} active card token(s). Replacement or membership upgrade invalidates old QR tokens and queues printing.</span></div>
         </div>
@@ -449,7 +519,7 @@ function renderPayments() {
           <label class="field full"><span>Payer name</span><input class="input-control" name="payerName" required /></label>
           <label class="field"><span>Payer type</span>${select("payerType", ["operator", "owner", "donor"], "operator")}</label>
           <label class="field"><span>Membership number</span><input class="input-control" name="membershipNumber" placeholder="MCK-..." /></label>
-          <label class="field"><span>Payment method</span>${select("method", paymentMethods, "PayChangu Mobile Money")}</label>
+          <label class="field"><span>Payment method</span>${select("method", paymentMethods, "AirtelMoney via PayChangu")}</label>
           <label class="field"><span>Amount MWK</span><input class="input-control" type="number" min="1" name="amount" required /></label>
           <label class="field"><span>Reference</span><input class="input-control" name="reference" placeholder="Transaction ID or receipt" /></label>
           <label class="field full"><span>Purpose</span><input class="input-control" name="purpose" value="Annual subscription" /></label>
@@ -466,7 +536,7 @@ function renderPayments() {
         ${unreconciled.length ? paymentTable(unreconciled, true) : `<div class="empty-state">No cash is currently waiting for bank deposit reconciliation.</div>`}
       </div>
       <div class="panel span-12">
-        <div class="table-header"><h2>PayChangu checkout</h2><span class="status">Mobile Money and Bank Card</span></div>
+        <div class="table-header"><h2>PayChangu gateway checkout</h2><span class="status">AirtelMoney, Mpamba, Card</span></div>
         ${payChanguCheckout({
           amount: 15000,
           payerName: "MACOKASA member",
@@ -621,6 +691,12 @@ function renderAnalytics() {
   const planRows = planCounts();
   const sexRows = sexCounts();
   const safetyScore = Math.round((state.operators.filter((operator) => operator.hasLicense && operator.helmetUse && operator.passengerHelmet && operator.licensePlate).length / Math.max(1, state.operators.length)) * 100);
+  const ownerFundPanel = activeRole === "owner" || activeRole === "staff" ? `
+      <div class="panel span-6">
+        <div class="table-header"><h2>Owner fund progress</h2></div>
+        ${barChart(ownerFundRows().map((row) => ({ label: row.motorcycle.split(" - ")[0], value: Math.max(0, row.net) })))}
+      </div>
+  ` : "";
   return `
     <section class="grid">
       ${metric("Operator safety score", `${safetyScore}%`, "Licence, helmet, passenger helmet, and plate")}
@@ -639,12 +715,9 @@ function renderAnalytics() {
         <div class="table-header"><h2>Participation by sex</h2></div>
         ${donutChart(sexRows, "Participation")}
       </div>
-      <div class="panel span-6">
-        <div class="table-header"><h2>Owner fund progress</h2></div>
-        ${barChart(ownerFundRows().map((row) => ({ label: row.motorcycle.split(" - ")[0], value: Math.max(0, row.net) })))}
-      </div>
+      ${ownerFundPanel}
       <div class="panel span-12">
-        <div class="table-header"><h2>Public website analytics feed</h2><span class="status green">Shareable live figures</span></div>
+        <div class="table-header"><h2>Impact analytics feed</h2><span class="status green">Shareable live figures</span></div>
         <p class="footer-note">These figures can power public stories, dashboards, donor reports, and district-level registration progress without manually copying numbers.</p>
       </div>
     </section>
@@ -706,6 +779,14 @@ function operatorForm() {
 }
 
 function handleClick(event) {
+  const jump = event.target.closest("[data-jump]")?.dataset.jump;
+  if (jump) {
+    activeRole = "public";
+    activeSection = "public";
+    render();
+    requestAnimationFrame(() => document.getElementById(jump)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    return;
+  }
   const section = event.target.closest("[data-section]")?.dataset.section;
   if (section) {
     activeSection = section;
@@ -824,7 +905,7 @@ async function submitOperator(values) {
     payerName: operator.fullName,
     payerType: "operator",
     membershipNumber: operator.membershipNumber,
-    method: "PayChangu Mobile Money",
+    method: "AirtelMoney via PayChangu",
     amount: plan?.annualFee || 0,
     purpose: `${plan?.name || "Membership"} annual subscription`,
     collectorName: "",
@@ -850,7 +931,7 @@ async function submitPayment(values) {
     purpose: values.purpose,
     collectorName: values.collectorName,
     reference: values.reference || "Manual entry",
-    status: values.method === "Cash" ? "awaiting deposit" : values.method.startsWith("PayChangu") ? "pending checkout" : "reconciled",
+    status: values.method === "Cash" ? "awaiting deposit" : values.method.includes("PayChangu") ? "pending checkout" : "reconciled",
     createdAt: today()
   });
   showToast("Payment saved.");
@@ -891,11 +972,11 @@ async function submitCard(values) {
     payerName: operator.fullName,
     payerType: "operator",
     membershipNumber: operator.membershipNumber,
-    method: "PayChangu Mobile Money",
+    method: "AirtelMoney via PayChangu",
     amount: (plan?.annualFee || 0) + 5000,
     purpose: `${values.reason} with card printing fee`,
     collectorName: "",
-    reference: "Pending mobile money",
+    reference: "Pending PayChangu checkout",
     status: "pending",
     createdAt: today()
   });
@@ -903,16 +984,15 @@ async function submitCard(values) {
 }
 
 function submitVerify(values) {
-  const token = String(values.token || "").split("token=").pop().trim();
-  const card = state.cards.find((item) => item.qrToken === token);
+  const token = parseVerificationToken(values.token);
+  const resultData = verifyCardToken(token);
   const result = document.querySelector("#verification-result");
-  if (!card) {
+  if (!resultData.card) {
     result.innerHTML = `<span class="status red">Fake or unknown card</span> No active MACOKASA card token was found.`;
     return;
   }
-  const operator = state.operators.find((item) => item.id === card.operatorId);
-  const tone = card.status === "active" ? "green" : "red";
-  result.innerHTML = `<span class="status ${tone}">${escapeHtml(card.status)}</span> ${escapeHtml(operator?.fullName || "Unknown operator")} - ${escapeHtml(operator?.membershipNumber || "")}. ${card.replacedBy ? `Replaced by ${escapeHtml(card.replacedBy)}.` : ""}`;
+  const tone = resultData.card.status === "active" ? "green" : "red";
+  result.innerHTML = `<span class="status ${tone}">${escapeHtml(resultData.card.status)}</span> ${escapeHtml(resultData.operator?.fullName || "Unknown operator")} - ${escapeHtml(resultData.operator?.membershipNumber || "")}. ${resultData.card.replacedBy ? `Replaced by ${escapeHtml(resultData.card.replacedBy)}.` : ""}`;
 }
 
 async function submitMotorcycle(values) {
@@ -974,7 +1054,7 @@ async function runReminderAutomation() {
       fullName: operator.fullName,
       channel,
       daysLeft: operator.daysLeft,
-      message: `Your MACOKASA ${planByKey(operator.membershipPlan)?.name || "membership"} membership expires in ${operator.daysLeft} day(s). Renew through PayChangu or a MACOKASA office.`,
+      message: `Your MACOKASA ${planByKey(operator.membershipPlan)?.name || "membership"} membership expires in ${operator.daysLeft} day(s). Renew by AirtelMoney, Mpamba, or card through PayChangu gateway, or visit a MACOKASA office.`,
       status: "sent",
       createdAt: new Date().toISOString()
     })));
@@ -1006,8 +1086,8 @@ function formValues(form) {
   return Object.fromEntries([...new FormData(form).entries()].map(([key, value]) => [key, String(value).trim()]));
 }
 
-function metric(label, value, note) {
-  return `<article class="metric span-3"><div class="metric-icon">${iconForMetric(label)}</div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note)}</small></article>`;
+function metric(label, value, note, spanClass = "span-3") {
+  return `<article class="metric ${spanClass}"><div class="metric-icon">${iconForMetric(label)}</div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note)}</small></article>`;
 }
 
 function planCard(plan) {
@@ -1040,8 +1120,8 @@ function payChanguCheckout({ amount, payerName, email, description }) {
   const txRef = `MCK-${Date.now()}`;
   const [firstName, ...rest] = String(payerName || "MACOKASA Member").split(" ");
   const lastName = rest.join(" ") || "Member";
-  const callbackUrl = `${config.publicBaseUrl || window.location.origin}/?payment=callback`;
-  const returnUrl = `${config.publicBaseUrl || window.location.origin}/?payment=return`;
+  const callbackUrl = `${appBaseUrl()}/?payment=callback`;
+  const returnUrl = `${appBaseUrl()}/?payment=return`;
   const disabled = config.paychanguPublicKey ? "" : "disabled";
   return `
     <form class="paychangu-box" method="POST" action="https://api.paychangu.com/hosted-payment-page" target="_blank">
@@ -1059,10 +1139,10 @@ function payChanguCheckout({ amount, payerName, email, description }) {
       <input type="hidden" name="meta" value="${escapeAttr(JSON.stringify({ source: "MACOKASA", txRef }))}" />
       <div>
         <strong>${money(amount)}</strong>
-        <span>Pay securely by mobile money or bank card through PayChangu.</span>
+        <span>Pay through PayChangu gateway using AirtelMoney, Mpamba, or bank card.</span>
       </div>
       <button class="primary-btn" type="submit" ${disabled}>Proceed to PayChangu</button>
-      ${config.paychanguPublicKey ? "" : `<p class="microcopy">Payment channel activation pending.</p>`}
+      ${config.paychanguPublicKey ? "" : `<p class="microcopy">Gateway activation pending.</p>`}
     </form>
   `;
 }
@@ -1198,39 +1278,62 @@ function table(headers, rows) {
 function cardPreview(operator, card) {
   const plan = planByKey(card?.membershipPlan || operator.membershipPlan);
   const token = card?.qrToken || `qr-${operator.id}-preview`;
-  const verifyUrl = `${config.publicBaseUrl || window.location.origin}/?verify=token=${encodeURIComponent(token)}`;
+  const verifyUrl = `${appBaseUrl()}/?verify=${encodeURIComponent(token)}`;
   return `
     <div class="card-preview">
-      <div class="id-card" data-id-card style="--card-color:${plan?.color || "#10b91f"}">
-        <div class="id-card-top">
-          <img src="./assets/macokasa-logo.png" alt="MACOKASA logo" />
-          <div>
-            <strong>MACOKASA MEMBER ID</strong>
-            <div class="microcopy" style="color:rgba(255,255,255,.75)">PVC card, ATM size</div>
+      <div class="card-stack">
+        <div class="id-card id-card-front plan-${escapeAttr(plan?.key || "regular")}" data-id-card style="--card-color:${plan?.color || "#10b91f"}">
+          <div class="id-card-top">
+            <img src="./assets/macokasa-logo.png" alt="MACOKASA logo" />
+            <div>
+              <strong>MACOKASA MEMBER ID</strong>
+              <small>Kabaza verified membership</small>
+            </div>
+            <span class="card-tier" data-card-plan-label>${escapeHtml(plan?.name || "Member")}</span>
           </div>
-          <span class="status" data-card-plan-label>${escapeHtml(plan?.name || "Member")}</span>
+          <div class="id-card-body">
+            <div class="member-photo has-image" data-card-photo-preview style="background-image:url('./assets/member-photo-placeholder.png')">
+              <span>${initials(operator.fullName)}</span>
+            </div>
+            <div class="id-card-details">
+              <h3 data-card-name>${escapeHtml(operator.fullName)}</h3>
+              <div class="id-field"><span>Membership no.</span><strong data-card-number>${escapeHtml(operator.membershipNumber)}</strong></div>
+              <div class="id-field"><span>Operating area</span><strong data-card-area>${escapeHtml(operator.operatingArea)}</strong></div>
+              <div class="id-pair">
+                <div class="id-field"><span>District</span><strong data-card-district>${escapeHtml(operator.district)}</strong></div>
+                <div class="id-field"><span>Sex</span><strong data-card-sex>${escapeHtml(operator.sex || "Not recorded")}</strong></div>
+              </div>
+              <div class="id-field"><span>Plate</span><strong data-card-plate>${escapeHtml(operator.licensePlate || "Not recorded")}</strong></div>
+            </div>
+            <a class="qr-link" href="${escapeAttr(verifyUrl)}" target="_blank" rel="noreferrer" aria-label="Scan MACOKASA card">
+              <div class="qr-box" data-qr="${escapeAttr(verifyUrl)}">
+                <span class="microcopy">QR</span>
+              </div>
+              <strong>SCAN ME</strong>
+            </a>
+          </div>
         </div>
-        <div class="id-card-body">
-          <div class="member-photo" data-card-photo-preview>
-            <span>${initials(operator.fullName)}</span>
+        <div class="id-card id-card-back plan-${escapeAttr(plan?.key || "regular")}" style="--card-color:${plan?.color || "#10b91f"}">
+          <div class="id-card-back-head">
+            <img src="./assets/macokasa-logo.png" alt="MACOKASA logo" />
+            <div>
+              <strong>MACOKASA</strong>
+              <span>Malawi Coalition for Kabaza Stakeholders Association</span>
+            </div>
           </div>
-          <div class="id-card-details">
-            <h3 data-card-name>${escapeHtml(operator.fullName)}</h3>
-            <div class="id-field"><span>Membership number</span><strong data-card-number>${escapeHtml(operator.membershipNumber)}</strong></div>
-            <div class="id-field"><span>Operating area</span><strong data-card-area>${escapeHtml(operator.operatingArea)}</strong></div>
-            <div class="id-field"><span>District</span><strong data-card-district>${escapeHtml(operator.district)}</strong></div>
-            <div class="id-field"><span>Sex</span><strong data-card-sex>${escapeHtml(operator.sex || "Not recorded")}</strong></div>
-            <div class="id-field"><span>Plate</span><strong data-card-plate>${escapeHtml(operator.licensePlate || "Not recorded")}</strong></div>
+          <div class="back-message">
+            <strong>This card is the property of MACOKASA.</strong>
+            <p>If lost and found, return it to the nearest MACOKASA office, the chairperson of the Kabaza rank, or the nearest police unit.</p>
           </div>
-          <div class="qr-box" data-qr="${escapeAttr(verifyUrl)}">
-            <span class="microcopy">QR loading</span>
+          <div class="back-strip">
+            <span>${escapeHtml(operator.membershipNumber)}</span>
+            <span>${escapeHtml(card?.cardNumber || "PREVIEW CARD")}</span>
           </div>
         </div>
       </div>
-      <div class="split-list">
-        <div class="record-card"><strong>Verification URL</strong><span>${escapeHtml(verifyUrl)}</span></div>
-        <div class="record-card"><strong>Card token status</strong><span>${escapeHtml(card?.status || "preview only")}</span></div>
-        <div class="record-card"><strong>Print instructions</strong><span>Include anti-copy laminate, serial number, QR token, and MACOKASA staff verification workflow.</span></div>
+      <div class="card-preview-info">
+        <div><strong>Verification</strong><span>${escapeHtml(card?.status || "preview only")}</span></div>
+        <div><strong>URL</strong><span>${escapeHtml(verifyUrl)}</span></div>
       </div>
     </div>
   `;
@@ -1241,7 +1344,7 @@ function renderQrCodes() {
     const value = box.dataset.qr;
     box.innerHTML = "";
     if (window.QRCode?.toCanvas) {
-      window.QRCode.toCanvas(value, { width: 96, margin: 1 }, (error, canvas) => {
+      window.QRCode.toCanvas(value, { width: 76, margin: 0 }, (error, canvas) => {
         if (error) {
           box.textContent = "QR unavailable";
           return;
@@ -1251,8 +1354,8 @@ function renderQrCodes() {
     } else if (window.QRCode) {
       new window.QRCode(box, {
         text: value,
-        width: 96,
-        height: 96,
+        width: 76,
+        height: 76,
         correctLevel: window.QRCode.CorrectLevel?.M
       });
     } else {
@@ -1267,7 +1370,11 @@ function updateCardPreviewFromForm() {
   if (!form || !card) return;
   const values = formValues(form);
   const plan = planByKey(values.cardPlan);
-  card.style.setProperty("--card-color", plan?.color || "#10b91f");
+  document.querySelectorAll(".id-card-front, .id-card-back").forEach((node) => {
+    node.style.setProperty("--card-color", plan?.color || "#10b91f");
+    node.classList.remove("plan-regular", "plan-silver", "plan-gold", "plan-platinum");
+    node.classList.add(`plan-${plan?.key || "regular"}`);
+  });
   setText("[data-card-plan-label]", plan?.name || "Member");
   setText("[data-card-name]", values.cardName || "Member name");
   setText("[data-card-number]", values.cardNumber || "MCK-0000");
@@ -1385,7 +1492,7 @@ function donutChart(rows, label) {
 
 function iconForMetric(label) {
   const key = label.toLowerCase();
-  if (key.includes("operator")) return iconRegistry();
+  if (key.includes("operator")) return iconMotorcycle();
   if (key.includes("owner")) return iconMotorcycle();
   if (key.includes("cash") || key.includes("revenue") || key.includes("donation")) return iconPayment();
   if (key.includes("female") || key.includes("participation")) return iconUserPlus();
@@ -1424,6 +1531,23 @@ function planByKey(key) {
   return membershipPlans.find((plan) => plan.key === key);
 }
 
+function parseVerificationToken(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    return parseVerificationToken(url.searchParams.get("verify") || url.searchParams.get("token") || "");
+  } catch {
+    return raw.includes("token=") ? raw.split("token=").pop().trim() : raw;
+  }
+}
+
+function verifyCardToken(token) {
+  const card = state.cards.find((item) => item.qrToken === token);
+  const operator = card ? state.operators.find((item) => item.id === card.operatorId) : null;
+  return { card, operator };
+}
+
 function activeRoleLabel() {
   return {
     public: "Public visitor",
@@ -1439,6 +1563,10 @@ function money(value) {
 
 function compactNumber(value) {
   return numberValue(value).toLocaleString("en-US");
+}
+
+function appBaseUrl() {
+  return config.publicBaseUrl && config.publicBaseUrl !== "__origin__" ? config.publicBaseUrl : window.location.origin;
 }
 
 function numberValue(value) {
@@ -1499,7 +1627,7 @@ function iconRegistry() { return svg("M4 4h16v16H4V4Zm4 5h8M8 13h8M8 17h5"); }
 function iconBell() { return svg("M18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2ZM10 20h4"); }
 function iconPayment() { return svg("M3 6h18v12H3V6Zm0 4h18M7 15h4"); }
 function iconCard() { return svg("M3 5h18v14H3V5Zm3 4h6M6 13h4M15 12h3"); }
-function iconMotorcycle() { return svg("M5 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm14 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM5 17h14l-2-7H8l-3 7Zm4-7 2-4h4l2 4"); }
+function iconMotorcycle() { return svg("M5.5 17.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Zm13 0a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5ZM8 18h4.4l2.6-5h2.2l1.3 5M7 18l2.4-6.2h3.2l2.4 3.2M10.5 8.5h3.5l1 3.3M14 8.5l2.5-2.5M9.2 11.8h6.1"); }
 function iconShield() { return svg("M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"); }
 function iconCoop() { return svg("M7 11a4 4 0 1 1 8 0M3 21a6 6 0 0 1 12 0M17 7h4M19 5v4M18 21h3v-6h-3v6Z"); }
 function iconChart() { return svg("M4 20V4M4 20h16M8 16v-5M12 16V8M16 16v-9"); }
