@@ -38,7 +38,7 @@ export const membershipPlans = [
     name: "Regular",
     audience: "Operator",
     annualFee: 15000,
-    color: "#178f3a",
+    color: "#10b91f",
     benefits: ["National membership record", "Renewal reminders", "Public QR verification", "ROSAF training discount eligibility"]
   },
   {
@@ -46,7 +46,7 @@ export const membershipPlans = [
     name: "Silver",
     audience: "Operator",
     annualFee: 30000,
-    color: "#64748b",
+    color: "#0ea5e9",
     benefits: ["All Regular benefits", "Priority ID card queue", "Safety compliance badge", "Owner matching visibility"]
   },
   {
@@ -54,7 +54,7 @@ export const membershipPlans = [
     name: "Gold",
     audience: "Operator",
     annualFee: 55000,
-    color: "#d79b00",
+    color: "#f4c400",
     benefits: ["All Silver benefits", "Reduced refresher training fees", "Rank promotion as safer operator", "Complaints resolution support"]
   },
   {
@@ -62,7 +62,7 @@ export const membershipPlans = [
     name: "Platinum",
     audience: "Operator",
     annualFee: 90000,
-    color: "#0ea5e9",
+    color: "#e31d24",
     benefits: ["All Gold benefits", "Tracker installation eligibility", "Fleet-owner priority matching", "Premium digital profile"]
   },
   {
@@ -70,7 +70,7 @@ export const membershipPlans = [
     name: "Owner Basic",
     audience: "Motorcycle Owner",
     annualFee: 45000,
-    color: "#7c3aed",
+    color: "#0075bd",
     benefits: ["Owner portal", "Motorcycle mapping", "Operator agreement records", "Basic earnings and expense tracking"]
   },
   {
@@ -78,13 +78,16 @@ export const membershipPlans = [
     name: "Owner Fleet",
     audience: "Motorcycle Owner",
     annualFee: 120000,
-    color: "#be123c",
+    color: "#111827",
     benefits: ["All Owner Basic benefits", "Multi-bike fund dashboard", "Operator behavior notifications", "Complaints feedback workflow"]
   }
 ];
 
-export const paymentMethods = ["Bank", "POS", "AirtelMoney", "Mpamba", "Cash"];
+export const paymentMethods = ["PayChangu Mobile Money", "PayChangu Bank Card", "Bank Transfer", "Cash"];
 export const reminderDays = [28, 14, 7, 3, 2, 1];
+
+export const affiliatedMembers = ["ROSAF", "KATAMAS", "KAMA"];
+export const stakeholders = ["DRTSS", "MPS", "Local government", "Ministry of Transport"];
 
 export const demoState = {
   impact: {
@@ -103,6 +106,7 @@ export const demoState = {
       phone: "+265 991 230 111",
       email: "joseph.banda@example.com",
       nationalId: "MW-LL-000001",
+      sex: "Male",
       district: "Lilongwe",
       operatingArea: "Area 25 Rank",
       membershipPlan: "gold",
@@ -117,6 +121,7 @@ export const demoState = {
       licensePlate: "LL 8421",
       trackerInstalled: false,
       status: "active",
+      photoData: "",
       createdAt: "2026-01-11"
     },
     {
@@ -126,6 +131,7 @@ export const demoState = {
       phone: "+265 888 450 222",
       email: "madalitso.jere@example.com",
       nationalId: "MW-BT-000002",
+      sex: "Female",
       district: "Blantyre",
       operatingArea: "Clock Tower",
       membershipPlan: "regular",
@@ -140,6 +146,7 @@ export const demoState = {
       licensePlate: "BT 3402",
       trackerInstalled: false,
       status: "training due",
+      photoData: "",
       createdAt: "2026-02-03"
     },
     {
@@ -149,6 +156,7 @@ export const demoState = {
       phone: "+265 999 120 887",
       email: "allan.faison@example.com",
       nationalId: "MW-MZ-000003",
+      sex: "Male",
       district: "Mzuzu",
       operatingArea: "Mzuzu Depot",
       membershipPlan: "platinum",
@@ -163,6 +171,7 @@ export const demoState = {
       licensePlate: "MZ 7728",
       trackerInstalled: true,
       status: "active",
+      photoData: "",
       createdAt: "2026-02-19"
     }
   ],
@@ -237,7 +246,7 @@ export const demoState = {
       payerName: "Joseph Banda",
       payerType: "operator",
       membershipNumber: "MCK-LL-2026-0001",
-      method: "AirtelMoney",
+      method: "PayChangu Mobile Money",
       amount: 55000,
       purpose: "Gold annual subscription",
       collectorName: "",
@@ -327,9 +336,10 @@ export const demoState = {
       id: "don-001",
       donorName: "Road Safety Supporter",
       amount: 250000,
-      method: "Bank",
+      method: "Bank Transfer",
       purpose: "Helmet safety campaign",
       createdAt: "2026-05-18"
     }
-  ]
+  ],
+  reminderLogs: []
 };

@@ -27,7 +27,7 @@ serve(async () => {
     const daysLeft = Math.ceil((expiry.getTime() - today.getTime()) / 86400000);
     if (!reminderDays.has(daysLeft)) continue;
 
-    const message = `MACOKASA reminder: ${operator.fullName}, your membership ${operator.membershipNumber} expires in ${daysLeft} day(s). Renew by QR, AirtelMoney, Mpamba, POS, Bank, or Cash.`;
+    const message = `MACOKASA reminder: ${operator.fullName}, your membership ${operator.membershipNumber} expires in ${daysLeft} day(s). Renew by QR through PayChangu Mobile Money or Bank Card, or visit a MACOKASA office.`;
     queued.push({
       operator_membership_number: operator.membershipNumber,
       channel: "sms",

@@ -1,0 +1,28 @@
+name: Deploy to Cloudflare Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      PAYCHANGU_PUBLIC_KEY: ${{ secrets.PAYCHANGU_PUBLIC_KEY }}
+      PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
+      MACOKASA_STAFF_PASSWORD: ${{ secrets.MACOKASA_STAFF_PASSWORD }}
+      MACOKASA_OWNER_PASSWORD: ${{ secrets.MACOKASA_OWNER_PASSWORD }}
+      MACOKASA_PRINT_PASSWORD: ${{ secrets.MACOKASA_PRINT_PASSWORD }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run check
+      - run: npm run build
+      - run: npx wrangler@latest pages deploy public --project-name macokasa-kabaza-system

@@ -1,7 +1,7 @@
--- MACOKASA Kabaza Management System prototype schema.
--- Run this in the Supabase SQL editor for a free-plan prototype.
--- This schema stores prototype records as JSONB so the first release can move quickly.
--- Before production, split sensitive data into normalized tables and tighten RLS.
+-- MACOKASA Kabaza Management System first-release schema.
+-- Run this in the Supabase SQL editor for the shared review database.
+-- The first release stores operational records as JSONB so modules can evolve quickly.
+-- Before storing real private member data, tighten RLS and use authenticated roles.
 
 create extension if not exists pgcrypto;
 
@@ -16,7 +16,8 @@ create table if not exists public.macokasa_records (
       'cards',
       'cooperatives',
       'fundEntries',
-      'donations'
+      'donations',
+      'reminderLogs'
     )
   ),
   payload jsonb not null default '{}'::jsonb,
@@ -50,6 +51,18 @@ create table if not exists public.reminder_jobs (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.paychangu_transactions (
+  id uuid primary key default gen_random_uuid(),
+  tx_ref text not null unique,
+  amount numeric,
+  currency text default 'MWK',
+  payer_name text,
+  status text not null default 'pending',
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
@@ -65,33 +78,39 @@ create trigger macokasa_records_touch_updated_at
 before update on public.macokasa_records
 for each row execute function public.touch_updated_at();
 
+drop trigger if exists paychangu_transactions_touch_updated_at on public.paychangu_transactions;
+create trigger paychangu_transactions_touch_updated_at
+before update on public.paychangu_transactions
+for each row execute function public.touch_updated_at();
+
 alter table public.macokasa_records enable row level security;
 alter table public.card_verifications enable row level security;
 alter table public.reminder_jobs enable row level security;
+alter table public.paychangu_transactions enable row level security;
 
--- Prototype policies for testing the free static app.
+-- Review policies for testing the shared app.
 -- Replace these with authenticated role policies before entering real member data.
-drop policy if exists "Prototype read records" on public.macokasa_records;
-create policy "Prototype read records"
+drop policy if exists "Review read records" on public.macokasa_records;
+create policy "Review read records"
 on public.macokasa_records for select
 to anon, authenticated
 using (true);
 
-drop policy if exists "Prototype insert records" on public.macokasa_records;
-create policy "Prototype insert records"
+drop policy if exists "Review insert records" on public.macokasa_records;
+create policy "Review insert records"
 on public.macokasa_records for insert
 to anon, authenticated
 with check (true);
 
-drop policy if exists "Prototype update records" on public.macokasa_records;
-create policy "Prototype update records"
+drop policy if exists "Review update records" on public.macokasa_records;
+create policy "Review update records"
 on public.macokasa_records for update
 to anon, authenticated
 using (true)
 with check (true);
 
-drop policy if exists "Prototype log card scans" on public.card_verifications;
-create policy "Prototype log card scans"
+drop policy if exists "Review log card scans" on public.card_verifications;
+create policy "Review log card scans"
 on public.card_verifications for insert
 to anon, authenticated
 with check (true);
@@ -106,6 +125,19 @@ drop policy if exists "Staff insert reminders" on public.reminder_jobs;
 create policy "Staff insert reminders"
 on public.reminder_jobs for insert
 to anon, authenticated
+with check (true);
+
+drop policy if exists "Staff read payment transactions" on public.paychangu_transactions;
+create policy "Staff read payment transactions"
+on public.paychangu_transactions for select
+to authenticated
+using (true);
+
+drop policy if exists "Service write payment transactions" on public.paychangu_transactions;
+create policy "Service write payment transactions"
+on public.paychangu_transactions for all
+to service_role
+using (true)
 with check (true);
 
 create or replace view public.operator_membership_summary as

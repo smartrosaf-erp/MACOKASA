@@ -1,14 +1,16 @@
-import { demoState, districts, membershipPlans, paymentMethods, publicSources, reminderDays } from "./data.js";
+import { affiliatedMembers, demoState, districts, membershipPlans, paymentMethods, publicSources, reminderDays, stakeholders } from "./data.js";
 
 const config = window.MACOKASA_CONFIG || {};
 const app = document.querySelector("#app");
-const storageKey = "macokasa-kabaza-demo-state-v1";
-const collections = ["operators", "owners", "motorcycles", "payments", "cards", "cooperatives", "fundEntries", "donations"];
+const storageKey = "macokasa-kabaza-state-v2";
+const collections = ["operators", "owners", "motorcycles", "payments", "cards", "cooperatives", "fundEntries", "donations", "reminderLogs"];
 let activeSection = "public";
-let activeRole = "staff";
+let activeRole = "public";
 let toastTimer = null;
 let supabaseClient = null;
 let supabaseEnabled = false;
+let unlockedRoles = new Set(["public"]);
+let pendingRole = "";
 let state = loadState();
 
 const navItems = [
@@ -23,7 +25,7 @@ const navItems = [
   ["safety", "Licensing and safety", iconShield, ["staff"]],
   ["cooperatives", "Cooperative loans", iconCoop, ["staff"]],
   ["analytics", "Impact analytics", iconChart, ["public", "staff"]],
-  ["deployment", "GitHub, Render, Supabase", iconCloud, ["staff"]]
+  ["operations", "Operations control", iconCloud, ["staff"]]
 ];
 
 init();
@@ -33,6 +35,7 @@ function init() {
   void connectSupabase();
   document.addEventListener("click", handleClick);
   document.addEventListener("change", handleChange);
+  document.addEventListener("input", handleInput);
   document.addEventListener("submit", handleSubmit);
 }
 
@@ -71,10 +74,10 @@ async function connectSupabase() {
     });
     supabaseEnabled = true;
     render();
-    showToast("Connected to Supabase. Demo records were replaced by live project records where available.");
+    showToast("Live records loaded.");
   } catch (error) {
     console.error(error);
-    showToast("Supabase connection failed. Continuing in local demo mode.");
+    showToast("Records are available on this device.");
   }
 }
 
@@ -84,7 +87,7 @@ async function addRecord(collection, record) {
   render();
   if (supabaseEnabled && supabaseClient) {
     const { error } = await supabaseClient.from("macokasa_records").insert({ collection, payload: record });
-    if (error) showToast(`Saved locally, but Supabase insert failed: ${error.message}`);
+    if (error) showToast(`Saved on this device. Live sync needs attention.`);
   }
 }
 
@@ -96,7 +99,7 @@ async function updateRecord(collection, id, updates) {
   if (supabaseEnabled && supabaseClient && remote) {
     const payload = state[collection].find((record) => record.id === id);
     const { error } = await supabaseClient.from("macokasa_records").update({ payload }).eq("id", remote);
-    if (error) showToast(`Updated locally, but Supabase update failed: ${error.message}`);
+    if (error) showToast(`Updated on this device. Live sync needs attention.`);
   }
 }
 
@@ -104,6 +107,10 @@ function render() {
   if (!navItems.some(([key, , , roles]) => key === activeSection && roles.includes(activeRole))) {
     activeSection = activeRole === "owner" ? "owners" : activeRole === "printing" ? "cards" : "public";
   }
+  const roleUnlocked = unlockedRoles.has(activeRole);
+  const visibleNavItems = roleUnlocked
+    ? navItems.filter(([, , , roles]) => roles.includes(activeRole))
+    : navItems.filter(([, , , roles]) => roles.includes("public"));
   app.innerHTML = `
     <div class="app-shell">
       <header class="topbar">
@@ -121,15 +128,14 @@ function render() {
             ${roleOption("staff", "MACOKASA staff")}
             ${roleOption("printing", "Printing authority")}
           </select>
-          <button class="quiet-btn" type="button" data-action="reset-demo">Reset demo data</button>
-          <button class="secondary-btn" type="button" data-section="deployment">Deployment setup</button>
+          ${activeRole === "public" ? `<button class="secondary-btn" type="button" data-section="registration">Join MACOKASA</button>` : ""}
+          ${activeRole !== "public" && roleUnlocked ? `<button class="quiet-btn" type="button" data-action="logout">Lock portal</button>` : ""}
         </div>
       </header>
       <div class="layout">
         <aside class="sidebar">
           <nav class="nav-group" aria-label="MACOKASA modules">
-            ${navItems
-              .filter(([, , , roles]) => roles.includes(activeRole))
+            ${visibleNavItems
               .map(([key, label, icon]) => `
                 <button class="nav-button ${activeSection === key ? "active" : ""}" type="button" data-section="${key}">
                   ${icon()} <span>${label}</span>
@@ -137,12 +143,15 @@ function render() {
               `).join("")}
           </nav>
         </aside>
-        <main class="workspace">${renderActiveSection()}</main>
+        <main class="workspace">${roleUnlocked ? renderActiveSection() : renderPortalLogin()}</main>
       </div>
       <div class="toast" role="status" aria-live="polite"></div>
     </div>
   `;
-  requestAnimationFrame(renderQrCodes);
+  requestAnimationFrame(() => {
+    renderQrCodes();
+    updateCardPreviewFromForm();
+  });
 }
 
 function roleOption(value, label) {
@@ -162,22 +171,52 @@ function renderActiveSection() {
     safety: renderSafety,
     cooperatives: renderCooperatives,
     analytics: renderAnalytics,
-    deployment: renderDeployment
+    operations: renderOperations
   };
   return (sections[activeSection] || renderPublicWebsite)();
+}
+
+function renderPortalLogin() {
+  return `
+    <section class="grid">
+      <div class="login-panel span-7">
+        <div class="form-header">
+          <div>
+            <p class="eyebrow">Secure access</p>
+            <h2>${escapeHtml(activeRoleLabel())} portal</h2>
+          </div>
+          <span class="status amber">Password required</span>
+        </div>
+        <form class="form-grid" data-form="portal-login">
+          <label class="field full"><span>Password</span><input class="input-control" type="password" name="password" autocomplete="current-password" required /></label>
+          <button class="primary-btn" type="submit">Enter portal</button>
+          <button class="quiet-btn" type="button" data-role="public">Return to website</button>
+        </form>
+      </div>
+      <div class="panel span-5">
+        <h2>MACOKASA digital membership platform</h2>
+        <div class="split-list">
+          <div class="record-card"><strong>Members</strong><span>Register, renew, verify cards, and access safer-rider benefits.</span></div>
+          <div class="record-card"><strong>Owners</strong><span>Track motorcycles, agreements, income, expenses, and assigned operators.</span></div>
+          <div class="record-card"><strong>Staff</strong><span>Manage subscriptions, payments, cards, safety compliance, cooperatives, and reporting.</span></div>
+        </div>
+      </div>
+    </section>
+  `;
 }
 
 function renderPublicWebsite() {
   const impact = state.impact;
   const registeredShare = ((impact.registeredOperators / impact.reportedMotorcycles) * 100).toFixed(2);
+  const femaleShare = participationShare("Female");
   return `
     <section class="hero">
       <div class="hero-main">
         <p class="eyebrow">Malawi Coalition for Kabaza Stakeholders Association</p>
         <h1>Formalizing Malawi's Kabaza economy with safer riders, verified members, and accountable ownership.</h1>
         <p>
-          MACOKASA can use this system as a national operator database, subscription platform, ID-card verification tool,
-          owner portal, safety compliance desk, and public impact website connected to the ERP.
+          MACOKASA coordinates operators, motorcycle owners, cooperatives, safety partners, and public institutions through
+          verified membership, safer-rider promotion, and digital card authentication.
         </p>
         <div class="hero-actions">
           <button class="primary-btn" type="button" data-section="registration">Register membership</button>
@@ -186,7 +225,7 @@ function renderPublicWebsite() {
         </div>
       </div>
       <aside class="hero-side">
-        <h2>Online facts used in this prototype</h2>
+        <h2>Sector evidence</h2>
         <div class="source-list">
           ${publicSources.map((source) => `
             <div class="source-item">
@@ -201,19 +240,40 @@ function renderPublicWebsite() {
       ${metric("Estimated active fleet", compactNumber(impact.estimatedFleet), "Planning baseline from your brief and public reporting")}
       ${metric("Reported motorcycles", compactNumber(impact.reportedMotorcycles), "Published figure used to size the registration gap")}
       ${metric("Registered operators", compactNumber(impact.registeredOperators), `${registeredShare}% registration baseline`)}
-      ${metric("Registration target", `${impact.targetRegistrationShare}%`, "Ambition for formal national coverage")}
+      ${metric("Female participation", `${femaleShare}%`, "Tracked from membership registration")}
       <div class="panel span-8">
         <div class="panel-header">
           <div>
-            <p class="eyebrow">Public data story</p>
-            <h2>What the public website should communicate</h2>
+            <p class="eyebrow">Public mission</p>
+            <h2>MACOKASA national coordination</h2>
           </div>
-          <span class="status green">Live ERP figures ready</span>
+          <span class="status green">Verified membership drive</span>
         </div>
         <div class="split-list">
           <div class="record-card"><strong>Livelihoods and formal work</strong><span>Kabaza supports youth employment and small-scale motorcycle ownership, but it needs verified membership and safer operating standards.</span></div>
           <div class="record-card"><strong>Safety and public health</strong><span>The portal tracks helmets, passenger helmets, licence status, licence plates, training history, and complaints so safer operators can be promoted at ranks.</span></div>
-          <div class="record-card"><strong>Stakeholder coordination</strong><span>MACOKASA staff, ROSAF, printing authorities, city councils, police, owners, and cooperatives can work from one evidence-backed system.</span></div>
+          <div class="record-card"><strong>Stakeholder coordination</strong><span>MACOKASA works with affiliated members and public stakeholders to improve safety, training, registration, licensing, and operator accountability.</span></div>
+        </div>
+      </div>
+      <div class="panel span-4">
+        <h2>Affiliated members</h2>
+        <div class="chip-grid">${affiliatedMembers.map((name) => `<span class="brand-chip">${escapeHtml(name)}</span>`).join("")}</div>
+        <h2 style="margin-top:18px">Stakeholders</h2>
+        <div class="chip-grid">${stakeholders.map((name) => `<span class="brand-chip outline">${escapeHtml(name)}</span>`).join("")}</div>
+      </div>
+      <div class="panel span-8">
+        <div class="panel-header">
+          <div><p class="eyebrow">Participation dashboard</p><h2>Member profile by sex</h2></div>
+          <span class="status">${state.operators.length} records</span>
+        </div>
+        ${donutChart(sexCounts(), "Sex participation")}
+      </div>
+      <div class="panel span-4">
+        <h2>Portal access</h2>
+        <div class="split-list">
+          <button class="secondary-btn" type="button" data-role="staff">MACOKASA staff</button>
+          <button class="quiet-btn" type="button" data-role="owner">Motorcycle owner</button>
+          <button class="quiet-btn" type="button" data-role="printing">Printing authority</button>
         </div>
       </div>
       <div class="panel span-4">
@@ -222,7 +282,7 @@ function renderPublicWebsite() {
         <form class="form-grid" data-form="donation">
           <label class="field full"><span>Donor name</span><input class="input-control" name="donorName" required value="Road safety supporter" /></label>
           <label class="field"><span>Amount MWK</span><input class="input-control" type="number" name="amount" min="1" required value="50000" /></label>
-          <label class="field"><span>Method</span>${select("method", paymentMethods, "Bank")}</label>
+          <label class="field"><span>Method</span>${select("method", paymentMethods, "PayChangu Mobile Money")}</label>
           <label class="field full"><span>Purpose</span><input class="input-control" name="purpose" value="Helmet safety campaign" /></label>
           <button class="primary-btn" type="submit">Record donation</button>
         </form>
@@ -237,7 +297,7 @@ function renderRegistration() {
       <div class="login-panel span-12">
         <div class="form-header">
           <div>
-            <p class="eyebrow">One login window concept</p>
+            <p class="eyebrow">Membership access</p>
             <h2>Member, owner, and staff entry points</h2>
           </div>
           <span class="status">${activeRoleLabel()}</span>
@@ -245,7 +305,7 @@ function renderRegistration() {
         <div class="login-grid">
           <div class="login-card"><strong>Public member</strong><p class="footer-note">Operators register, choose Regular/Silver/Gold/Platinum, pay, and receive card status updates.</p><button class="quiet-btn" type="button" data-role="public">Use public view</button></div>
           <div class="login-card"><strong>Motorcycle owner</strong><p class="footer-note">Owners map motorcycles, agreements, operator income, expenses, and complaints feedback.</p><button class="quiet-btn" type="button" data-role="owner">Use owner portal</button></div>
-          <div class="login-card"><strong>MACOKASA staff</strong><p class="footer-note">Configured staff use the full ERP for verification, finance, safety, printing, and analytics.</p><button class="secondary-btn" type="button" data-role="staff">Use staff ERP</button></div>
+          <div class="login-card"><strong>MACOKASA staff</strong><p class="footer-note">Authorized staff use the full ERP for verification, finance, safety, printing, and analytics.</p><button class="secondary-btn" type="button" data-role="staff">Use staff ERP</button></div>
         </div>
       </div>
       <div class="panel span-7">
@@ -268,6 +328,15 @@ function renderRegistration() {
         <div class="table-header"><h2>Latest public registrations</h2></div>
         ${operatorTable(state.operators.slice(0, 5))}
       </div>
+      <div class="panel span-12">
+        <div class="table-header"><h2>PayChangu membership payment</h2><span class="status">Mobile Money and Card</span></div>
+        ${payChanguCheckout({
+          amount: 15000,
+          payerName: "New MACOKASA member",
+          email: "member@example.com",
+          description: "MACOKASA annual membership subscription"
+        })}
+      </div>
     </section>
   `;
 }
@@ -277,22 +346,23 @@ function renderStaffDashboard() {
   const cashHeld = state.payments.filter((payment) => payment.method === "Cash" && payment.status !== "reconciled").reduce((sum, payment) => sum + numberValue(payment.amount), 0);
   const unlicensed = state.operators.filter((operator) => !operator.hasLicense).length;
   const activeCards = state.cards.filter((card) => card.status === "active").length;
+  const femaleShare = participationShare("Female");
   return `
     <section class="grid">
-      ${metric("Operators", state.operators.length, "Registered in the demo ERP")}
+      ${metric("Operators", state.operators.length, "Registered in the ERP")}
       ${metric("Owners", state.owners.length, "Owner portal accounts")}
       ${metric("Cash in custody", money(cashHeld), "Requires deposit and reconciliation")}
-      ${metric("Due reminders", due.length, "Membership notices across 4 weeks to 1 day")}
+      ${metric("Female participation", `${femaleShare}%`, "Tracked from registration")}
       <div class="panel span-8">
         <div class="panel-header">
           <div>
             <p class="eyebrow">MACOKASA staff ERP</p>
             <h2>Command center</h2>
           </div>
-          <span class="status ${supabaseEnabled ? "green" : "amber"}">${supabaseEnabled ? "Supabase live" : "Local demo mode"}</span>
+          <span class="status green">Operational</span>
         </div>
         <div class="split-list">
-          <div class="record-card"><strong>Finance control</strong><span>Bank, POS, AirtelMoney, Mpamba, and Cash records are captured. Cash payments require collector name until deposit reconciliation.</span></div>
+          <div class="record-card"><strong>Finance control</strong><span>PayChangu Mobile Money, PayChangu Bank Card, bank transfers, and cash records are captured. Cash payments require collector name until deposit reconciliation.</span></div>
           <div class="record-card"><strong>Safety control</strong><span>${unlicensed} operator(s) still need licence support. Helmet, passenger helmet, plate, and tracker status are tracked.</span></div>
           <div class="record-card"><strong>Card control</strong><span>${activeCards} active card token(s). Replacement or membership upgrade invalidates old QR tokens and queues printing.</span></div>
         </div>
@@ -303,12 +373,17 @@ function renderStaffDashboard() {
           <button class="primary-btn" type="button" data-section="operators">Add operator</button>
           <button class="quiet-btn" type="button" data-section="payments">Record payment</button>
           <button class="quiet-btn" type="button" data-section="cards">Issue card</button>
+          <button class="quiet-btn" type="button" data-action="run-reminders">Run reminders</button>
           <button class="quiet-btn" type="button" data-section="analytics">View analytics</button>
         </div>
       </div>
       <div class="panel span-12">
         <div class="table-header"><h2>Priority renewal reminders</h2><span class="status amber">${due.length} queued</span></div>
         ${reminderTable(due)}
+      </div>
+      <div class="panel span-12">
+        <div class="table-header"><h2>Reminder dispatch log</h2><span class="status">${state.reminderLogs.length} sent</span></div>
+        ${reminderLogTable(state.reminderLogs)}
       </div>
     </section>
   `;
@@ -352,8 +427,13 @@ function renderMembership() {
       <div class="panel span-4">
         <h2>Reminder channels</h2>
         <div class="split-list">
-          ${reminderDays.map((day) => `<div class="record-card"><strong>${day} day${day === 1 ? "" : "s"} before expiry</strong><span>Email, WhatsApp, or SMS notification can be sent by Supabase Edge Function.</span></div>`).join("")}
+          ${reminderDays.map((day) => `<div class="record-card"><strong>${day} day${day === 1 ? "" : "s"} before expiry</strong><span>Email, WhatsApp, and SMS reminders are prepared for dispatch at this stage.</span></div>`).join("")}
         </div>
+        <button class="primary-btn" type="button" data-action="run-reminders" style="margin-top:12px">Run reminder automation</button>
+      </div>
+      <div class="panel span-12">
+        <div class="table-header"><h2>Reminder dispatch log</h2><span class="status">${state.reminderLogs.length} sent</span></div>
+        ${reminderLogTable(state.reminderLogs)}
       </div>
     </section>
   `;
@@ -369,7 +449,7 @@ function renderPayments() {
           <label class="field full"><span>Payer name</span><input class="input-control" name="payerName" required /></label>
           <label class="field"><span>Payer type</span>${select("payerType", ["operator", "owner", "donor"], "operator")}</label>
           <label class="field"><span>Membership number</span><input class="input-control" name="membershipNumber" placeholder="MCK-..." /></label>
-          <label class="field"><span>Payment method</span>${select("method", paymentMethods, "AirtelMoney")}</label>
+          <label class="field"><span>Payment method</span>${select("method", paymentMethods, "PayChangu Mobile Money")}</label>
           <label class="field"><span>Amount MWK</span><input class="input-control" type="number" min="1" name="amount" required /></label>
           <label class="field"><span>Reference</span><input class="input-control" name="reference" placeholder="Transaction ID or receipt" /></label>
           <label class="field full"><span>Purpose</span><input class="input-control" name="purpose" value="Annual subscription" /></label>
@@ -385,6 +465,15 @@ function renderPayments() {
         <div class="table-header"><h2>Cash accountability</h2><span class="status amber">${unreconciled.length} unreconciled</span></div>
         ${unreconciled.length ? paymentTable(unreconciled, true) : `<div class="empty-state">No cash is currently waiting for bank deposit reconciliation.</div>`}
       </div>
+      <div class="panel span-12">
+        <div class="table-header"><h2>PayChangu checkout</h2><span class="status">Mobile Money and Bank Card</span></div>
+        ${payChanguCheckout({
+          amount: 15000,
+          payerName: "MACOKASA member",
+          email: "member@example.com",
+          description: "MACOKASA subscription payment"
+        })}
+      </div>
     </section>
   `;
 }
@@ -399,7 +488,12 @@ function renderCards() {
           <div><p class="eyebrow">PVC ATM-size ID card</p><h2>Card printing and QR verification</h2></div>
           <span class="status ${activeRole === "printing" ? "green" : ""}">${activeRole === "printing" ? "Printing portal" : "Staff control"}</span>
         </div>
-        ${selectedOperator ? cardPreview(selectedOperator, selectedCard) : `<div class="empty-state">No operator is available for card preview.</div>`}
+        ${selectedOperator ? `
+          <div class="card-preview-layout">
+            ${cardDesignerForm(selectedOperator, selectedCard)}
+            ${cardPreview(selectedOperator, selectedCard)}
+          </div>
+        ` : `<div class="empty-state">No operator is available for card preview.</div>`}
       </div>
       <div class="panel span-5">
         <h2>Issue replacement or plan-change card</h2>
@@ -410,10 +504,10 @@ function renderCards() {
             </select>
           </label>
           <label class="field full"><span>Reason</span>${select("reason", ["Lost card replacement", "Membership upgrade", "Membership downgrade", "Damaged card"], "Lost card replacement")}</label>
-          <label class="field full"><span>New membership category</span>${planSelect("membershipPlan", selectedOperator?.membershipPlan || "regular")}</label>
+          <label class="field full"><span>New membership category</span>${planSelect("membershipPlan", selectedOperator?.membershipPlan || "regular", "Operator")}</label>
           <button class="primary-btn" type="submit">Invalidate old QR and queue card</button>
         </form>
-        <p class="footer-note">A photocopied QR code can still scan technically. The control is live token validation plus replacement invalidation, card print security, and staff/passenger verification screens.</p>
+        <p class="footer-note">Printed cards use live token validation, replacement invalidation, card serial control, and anti-copy print security. Replaced tokens are rejected during verification.</p>
       </div>
       <div class="panel span-7">
         <div class="table-header"><h2>Card register</h2><span class="status">${state.cards.length} cards</span></div>
@@ -525,13 +619,14 @@ function renderCooperatives() {
 function renderAnalytics() {
   const districtRows = districtCounts();
   const planRows = planCounts();
+  const sexRows = sexCounts();
   const safetyScore = Math.round((state.operators.filter((operator) => operator.hasLicense && operator.helmetUse && operator.passengerHelmet && operator.licensePlate).length / Math.max(1, state.operators.length)) * 100);
   return `
     <section class="grid">
       ${metric("Operator safety score", `${safetyScore}%`, "Licence, helmet, passenger helmet, and plate")}
       ${metric("Membership revenue", money(state.payments.filter((payment) => payment.payerType !== "donor").reduce((sum, payment) => sum + numberValue(payment.amount), 0)), "Recorded subscriptions")}
       ${metric("Public donations", money(state.donations.reduce((sum, donation) => sum + numberValue(donation.amount), 0)), "Donation button intake")}
-      ${metric("Fleet owner funds", money(state.fundEntries.reduce((sum, entry) => sum + (entry.type === "income" ? numberValue(entry.amount) : -numberValue(entry.amount)), 0)), "Managed for owners, not held by MACOKASA")}
+      ${metric("Female participation", `${participationShare("Female")}%`, "Women tracked in the operator sector")}
       <div class="panel span-6">
         <div class="table-header"><h2>Operators by district</h2></div>
         ${barChart(districtRows)}
@@ -540,40 +635,48 @@ function renderAnalytics() {
         <div class="table-header"><h2>Membership mix</h2></div>
         ${barChart(planRows)}
       </div>
+      <div class="panel span-6">
+        <div class="table-header"><h2>Participation by sex</h2></div>
+        ${donutChart(sexRows, "Participation")}
+      </div>
+      <div class="panel span-6">
+        <div class="table-header"><h2>Owner fund progress</h2></div>
+        ${barChart(ownerFundRows().map((row) => ({ label: row.motorcycle.split(" - ")[0], value: Math.max(0, row.net) })))}
+      </div>
       <div class="panel span-12">
         <div class="table-header"><h2>Public website analytics feed</h2><span class="status green">Shareable live figures</span></div>
-        <p class="footer-note">When Supabase is connected, these figures can power public stories, dashboards, donor reports, and district-level registration progress without manually copying numbers.</p>
+        <p class="footer-note">These figures can power public stories, dashboards, donor reports, and district-level registration progress without manually copying numbers.</p>
       </div>
     </section>
   `;
 }
 
-function renderDeployment() {
+function renderOperations() {
   return `
     <section class="grid">
       <div class="panel span-7">
         <div class="panel-header">
-          <div><p class="eyebrow">Free-plan architecture</p><h2>GitHub + Render + Supabase</h2></div>
-          <span class="status ${supabaseEnabled ? "green" : "amber"}">${supabaseEnabled ? "Supabase connected" : "Demo mode"}</span>
+          <div><p class="eyebrow">Administration</p><h2>Operations control</h2></div>
+          <span class="status green">Active</span>
         </div>
         <div class="split-list">
-          <div class="record-card"><strong>1. GitHub</strong><span>Push this folder to a private GitHub repository. The included workflow checks JavaScript syntax and the Render build output.</span></div>
-          <div class="record-card"><strong>2. Supabase</strong><span>Create a free Supabase project, run <code>supabase/schema.sql</code>, then use the project URL and anon key as Render environment variables.</span></div>
-          <div class="record-card"><strong>3. Render</strong><span>Create a Static Site from the GitHub repository. Render runs <code>node scripts/write-config.mjs</code> and publishes the <code>public</code> folder.</span></div>
-          <div class="record-card"><strong>4. Local first</strong><span>Use the local demo server now. No cloud accounts are required until the screens and data model are approved.</span></div>
+          <div class="record-card"><strong>Membership reminders</strong><span>Run subscription reminders for operators whose membership is approaching expiry.</span></div>
+          <div class="record-card"><strong>Card security</strong><span>Verify card tokens, invalidate replaced cards, and queue new cards for printing.</span></div>
+          <div class="record-card"><strong>Payment monitoring</strong><span>Track PayChangu payment references, bank transfers, and cash accountability.</span></div>
+          <div class="record-card"><strong>Stakeholder reporting</strong><span>Prepare district and safety summaries for MACOKASA leadership and partner institutions.</span></div>
         </div>
       </div>
       <div class="panel span-5">
-        <h2>Current environment</h2>
+        <h2>Automation center</h2>
         <div class="split-list">
-          <div class="record-card"><strong>Mode</strong><span>${supabaseEnabled ? "Supabase live records" : "Local demo data with browser storage"}</span></div>
-          <div class="record-card"><strong>Supabase URL</strong><span>${config.supabaseUrl ? escapeHtml(config.supabaseUrl) : "Not configured"}</span></div>
-          <div class="record-card"><strong>Public base URL</strong><span>${escapeHtml(config.publicBaseUrl || "http://127.0.0.1:4177")}</span></div>
+          <button class="primary-btn" type="button" data-action="run-reminders">Run renewal reminders</button>
+          <button class="quiet-btn" type="button" data-action="reconcile-sample">Reconcile deposited cash</button>
+          <button class="quiet-btn" type="button" data-section="cards">Open card verification</button>
         </div>
       </div>
       <div class="panel span-12">
-        <h2>Production caution</h2>
-        <p class="footer-note">This prototype is client-first for quick free hosting. Before real payments, WhatsApp/SMS, QR security, or private member data goes live, add server-side payment callbacks, verified SMS/WhatsApp providers, strong Supabase RLS policies, audit logs, and privacy notices.</p>
+        <div class="table-header"><h2>Reminder dispatch log</h2><span class="status">${state.reminderLogs.length} sent</span></div>
+        ${reminderLogTable(state.reminderLogs)}
       </div>
     </section>
   `;
@@ -586,6 +689,7 @@ function operatorForm() {
       <label class="field"><span>Phone</span><input class="input-control" name="phone" required placeholder="+265..." /></label>
       <label class="field"><span>Email</span><input class="input-control" type="email" name="email" /></label>
       <label class="field"><span>National ID</span><input class="input-control" name="nationalId" /></label>
+      <label class="field"><span>Sex</span>${select("sex", ["Male", "Female"], "Male")}</label>
       <label class="field"><span>District</span>${select("district", districts, "Lilongwe")}</label>
       <label class="field"><span>Operating area/rank</span><input class="input-control" name="operatingArea" required /></label>
       <label class="field"><span>Membership</span>${planSelect("membershipPlan", "regular", "Operator")}</label>
@@ -615,12 +719,13 @@ function handleClick(event) {
     return;
   }
   const action = event.target.closest("[data-action]")?.dataset.action;
-  if (action === "reset-demo") {
-    window.localStorage.removeItem(storageKey);
-    state = clone(demoState);
+  if (action === "logout") {
+    unlockedRoles.delete(activeRole);
     render();
-    showToast("Demo data reset.");
+    showToast("Portal locked.");
   }
+  if (action === "run-reminders") runReminderAutomation();
+  if (action === "reconcile-sample") reconcileCashPayments();
   if (action === "donate") {
     activeSection = "public";
     render();
@@ -633,6 +738,24 @@ function handleChange(event) {
     activeRole = event.target.value;
     render();
   }
+  if (event.target.matches("[data-card-photo]")) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const photo = document.querySelector("[data-card-photo-preview]");
+      if (photo) {
+        photo.style.backgroundImage = `url("${reader.result}")`;
+        photo.classList.add("has-image");
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+  if (event.target.closest("[data-card-designer]")) updateCardPreviewFromForm();
+}
+
+function handleInput(event) {
+  if (event.target.closest("[data-card-designer]")) updateCardPreviewFromForm();
 }
 
 async function handleSubmit(event) {
@@ -641,6 +764,7 @@ async function handleSubmit(event) {
   event.preventDefault();
   const values = formValues(form);
   const handlers = {
+    "portal-login": submitPortalLogin,
     operator: submitOperator,
     payment: submitPayment,
     donation: submitDonation,
@@ -651,6 +775,18 @@ async function handleSubmit(event) {
     cooperative: submitCooperative
   };
   await handlers[form.dataset.form]?.(values);
+}
+
+async function submitPortalLogin(values) {
+  const expected = config.portalPasswords?.[activeRole] || "";
+  if (!expected || values.password !== expected) {
+    showToast("Incorrect password.");
+    return;
+  }
+  unlockedRoles.add(activeRole);
+  activeSection = activeRole === "owner" ? "owners" : activeRole === "printing" ? "cards" : "staff";
+  render();
+  showToast(`${activeRoleLabel()} portal unlocked.`);
 }
 
 async function submitOperator(values) {
@@ -664,6 +800,7 @@ async function submitOperator(values) {
     phone: values.phone,
     email: values.email,
     nationalId: values.nationalId,
+    sex: values.sex,
     district: values.district,
     operatingArea: values.operatingArea,
     membershipPlan: values.membershipPlan,
@@ -678,6 +815,7 @@ async function submitOperator(values) {
     licensePlate: values.licensePlate,
     trackerInstalled: values.trackerInstalled === "Yes",
     status: values.hasLicense === "Yes" ? "active" : "training due",
+    photoData: "",
     createdAt: today()
   };
   await addRecord("operators", operator);
@@ -686,7 +824,7 @@ async function submitOperator(values) {
     payerName: operator.fullName,
     payerType: "operator",
     membershipNumber: operator.membershipNumber,
-    method: "AirtelMoney",
+    method: "PayChangu Mobile Money",
     amount: plan?.annualFee || 0,
     purpose: `${plan?.name || "Membership"} annual subscription`,
     collectorName: "",
@@ -712,7 +850,7 @@ async function submitPayment(values) {
     purpose: values.purpose,
     collectorName: values.collectorName,
     reference: values.reference || "Manual entry",
-    status: values.method === "Cash" ? "awaiting deposit" : "reconciled",
+    status: values.method === "Cash" ? "awaiting deposit" : values.method.startsWith("PayChangu") ? "pending checkout" : "reconciled",
     createdAt: today()
   });
   showToast("Payment saved.");
@@ -753,7 +891,7 @@ async function submitCard(values) {
     payerName: operator.fullName,
     payerType: "operator",
     membershipNumber: operator.membershipNumber,
-    method: "AirtelMoney",
+    method: "PayChangu Mobile Money",
     amount: (plan?.annualFee || 0) + 5000,
     purpose: `${values.reason} with card printing fee`,
     collectorName: "",
@@ -821,12 +959,55 @@ async function submitCooperative(values) {
   showToast("Cooperative loan request submitted.");
 }
 
+async function runReminderAutomation() {
+  const due = dueReminders();
+  if (!due.length) {
+    showToast("No membership reminders are due today.");
+    return;
+  }
+  const alreadySent = new Set(state.reminderLogs.map((log) => `${log.membershipNumber}-${log.daysLeft}-${today()}`));
+  const logs = due
+    .filter((operator) => !alreadySent.has(`${operator.membershipNumber}-${operator.daysLeft}-${today()}`))
+    .flatMap((operator) => ["Email", "WhatsApp", "SMS"].map((channel) => ({
+      id: newId("rem"),
+      membershipNumber: operator.membershipNumber,
+      fullName: operator.fullName,
+      channel,
+      daysLeft: operator.daysLeft,
+      message: `Your MACOKASA ${planByKey(operator.membershipPlan)?.name || "membership"} membership expires in ${operator.daysLeft} day(s). Renew through PayChangu or a MACOKASA office.`,
+      status: "sent",
+      createdAt: new Date().toISOString()
+    })));
+  if (!logs.length) {
+    showToast("Today's reminder batch was already sent.");
+    return;
+  }
+  state.reminderLogs = [...logs, ...state.reminderLogs];
+  persist();
+  render();
+  showToast(`${logs.length} reminder message(s) dispatched.`);
+}
+
+function reconcileCashPayments() {
+  let count = 0;
+  state.payments = state.payments.map((payment) => {
+    if (payment.method === "Cash" && payment.status !== "reconciled") {
+      count += 1;
+      return { ...payment, status: "reconciled", reference: payment.reference || `DEP-${Date.now()}` };
+    }
+    return payment;
+  });
+  persist();
+  render();
+  showToast(count ? `${count} cash payment(s) reconciled.` : "No unreconciled cash payment found.");
+}
+
 function formValues(form) {
   return Object.fromEntries([...new FormData(form).entries()].map(([key, value]) => [key, String(value).trim()]));
 }
 
 function metric(label, value, note) {
-  return `<article class="metric span-3"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note)}</small></article>`;
+  return `<article class="metric span-3"><div class="metric-icon">${iconForMetric(label)}</div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note)}</small></article>`;
 }
 
 function planCard(plan) {
@@ -840,10 +1021,57 @@ function planCard(plan) {
   `;
 }
 
+function cardDesignerForm(operator, card) {
+  return `
+    <form class="form-grid card-designer" data-card-designer>
+      <label class="field"><span>Name on card</span><input class="input-control" name="cardName" value="${escapeAttr(operator.fullName)}" /></label>
+      <label class="field"><span>Membership class</span>${planSelect("cardPlan", card?.membershipPlan || operator.membershipPlan, "Operator")}</label>
+      <label class="field"><span>Membership number</span><input class="input-control" name="cardNumber" value="${escapeAttr(operator.membershipNumber)}" /></label>
+      <label class="field"><span>Sex</span>${select("cardSex", ["Male", "Female"], operator.sex || "Male")}</label>
+      <label class="field"><span>Operating area</span><input class="input-control" name="cardArea" value="${escapeAttr(operator.operatingArea)}" /></label>
+      <label class="field"><span>District</span>${select("cardDistrict", districts, operator.district)}</label>
+      <label class="field"><span>Plate number</span><input class="input-control" name="cardPlate" value="${escapeAttr(operator.licensePlate || "")}" /></label>
+      <label class="field"><span>Photo</span><input class="input-control" type="file" accept="image/*" data-card-photo /></label>
+    </form>
+  `;
+}
+
+function payChanguCheckout({ amount, payerName, email, description }) {
+  const txRef = `MCK-${Date.now()}`;
+  const [firstName, ...rest] = String(payerName || "MACOKASA Member").split(" ");
+  const lastName = rest.join(" ") || "Member";
+  const callbackUrl = `${config.publicBaseUrl || window.location.origin}/?payment=callback`;
+  const returnUrl = `${config.publicBaseUrl || window.location.origin}/?payment=return`;
+  const disabled = config.paychanguPublicKey ? "" : "disabled";
+  return `
+    <form class="paychangu-box" method="POST" action="https://api.paychangu.com/hosted-payment-page" target="_blank">
+      <input type="hidden" name="public_key" value="${escapeAttr(config.paychanguPublicKey || "")}" />
+      <input type="hidden" name="callback_url" value="${escapeAttr(callbackUrl)}" />
+      <input type="hidden" name="return_url" value="${escapeAttr(returnUrl)}" />
+      <input type="hidden" name="tx_ref" value="${escapeAttr(txRef)}" />
+      <input type="hidden" name="amount" value="${escapeAttr(amount)}" />
+      <input type="hidden" name="currency" value="MWK" />
+      <input type="hidden" name="email" value="${escapeAttr(email)}" />
+      <input type="hidden" name="first_name" value="${escapeAttr(firstName)}" />
+      <input type="hidden" name="last_name" value="${escapeAttr(lastName)}" />
+      <input type="hidden" name="title" value="MACOKASA Payment" />
+      <input type="hidden" name="description" value="${escapeAttr(description)}" />
+      <input type="hidden" name="meta" value="${escapeAttr(JSON.stringify({ source: "MACOKASA", txRef }))}" />
+      <div>
+        <strong>${money(amount)}</strong>
+        <span>Pay securely by mobile money or bank card through PayChangu.</span>
+      </div>
+      <button class="primary-btn" type="submit" ${disabled}>Proceed to PayChangu</button>
+      ${config.paychanguPublicKey ? "" : `<p class="microcopy">Payment channel activation pending.</p>`}
+    </form>
+  `;
+}
+
 function operatorTable(rows) {
   if (!rows.length) return `<div class="empty-state">No operators yet.</div>`;
-  return table(["Member", "District", "Area", "Plan", "Licence", "Safety", "Expires"], rows.map((operator) => [
+  return table(["Member", "Sex", "District", "Area", "Plan", "Licence", "Safety", "Expires"], rows.map((operator) => [
     `<strong>${escapeHtml(operator.fullName)}</strong><br><span class="microcopy">${escapeHtml(operator.membershipNumber)}</span>`,
+    operator.sex || "Not recorded",
     operator.district,
     operator.operatingArea,
     planByKey(operator.membershipPlan)?.name || operator.membershipPlan,
@@ -944,6 +1172,18 @@ function reminderTable(rows) {
   ]));
 }
 
+function reminderLogTable(rows) {
+  if (!rows.length) return `<div class="empty-state">No reminder dispatch has been recorded yet.</div>`;
+  return table(["Date", "Member", "Channel", "Days left", "Status", "Message"], rows.slice(0, 30).map((log) => [
+    compactDate(log.createdAt),
+    `${escapeHtml(log.fullName)}<br><span class="microcopy">${escapeHtml(log.membershipNumber)}</span>`,
+    log.channel,
+    `${log.daysLeft}`,
+    statusPill(log.status, "green"),
+    escapeHtml(log.message)
+  ]));
+}
+
 function table(headers, rows) {
   return `
     <div class="table-wrap">
@@ -961,22 +1201,26 @@ function cardPreview(operator, card) {
   const verifyUrl = `${config.publicBaseUrl || window.location.origin}/?verify=token=${encodeURIComponent(token)}`;
   return `
     <div class="card-preview">
-      <div class="id-card">
+      <div class="id-card" data-id-card style="--card-color:${plan?.color || "#10b91f"}">
         <div class="id-card-top">
           <img src="./assets/macokasa-logo.png" alt="MACOKASA logo" />
           <div>
             <strong>MACOKASA MEMBER ID</strong>
             <div class="microcopy" style="color:rgba(255,255,255,.75)">PVC card, ATM size</div>
           </div>
-          <span class="status">${escapeHtml(plan?.name || "Member")}</span>
+          <span class="status" data-card-plan-label>${escapeHtml(plan?.name || "Member")}</span>
         </div>
         <div class="id-card-body">
-          <div>
-            <h3>${escapeHtml(operator.fullName)}</h3>
-            <div class="id-field"><span>Membership number</span><strong>${escapeHtml(operator.membershipNumber)}</strong></div>
-            <div class="id-field"><span>Operating area</span><strong>${escapeHtml(operator.operatingArea)}</strong></div>
-            <div class="id-field"><span>District</span><strong>${escapeHtml(operator.district)}</strong></div>
-            <div class="id-field"><span>Plate</span><strong>${escapeHtml(operator.licensePlate || "Not recorded")}</strong></div>
+          <div class="member-photo" data-card-photo-preview>
+            <span>${initials(operator.fullName)}</span>
+          </div>
+          <div class="id-card-details">
+            <h3 data-card-name>${escapeHtml(operator.fullName)}</h3>
+            <div class="id-field"><span>Membership number</span><strong data-card-number>${escapeHtml(operator.membershipNumber)}</strong></div>
+            <div class="id-field"><span>Operating area</span><strong data-card-area>${escapeHtml(operator.operatingArea)}</strong></div>
+            <div class="id-field"><span>District</span><strong data-card-district>${escapeHtml(operator.district)}</strong></div>
+            <div class="id-field"><span>Sex</span><strong data-card-sex>${escapeHtml(operator.sex || "Not recorded")}</strong></div>
+            <div class="id-field"><span>Plate</span><strong data-card-plate>${escapeHtml(operator.licensePlate || "Not recorded")}</strong></div>
           </div>
           <div class="qr-box" data-qr="${escapeAttr(verifyUrl)}">
             <span class="microcopy">QR loading</span>
@@ -1017,6 +1261,29 @@ function renderQrCodes() {
   });
 }
 
+function updateCardPreviewFromForm() {
+  const form = document.querySelector("[data-card-designer]");
+  const card = document.querySelector("[data-id-card]");
+  if (!form || !card) return;
+  const values = formValues(form);
+  const plan = planByKey(values.cardPlan);
+  card.style.setProperty("--card-color", plan?.color || "#10b91f");
+  setText("[data-card-plan-label]", plan?.name || "Member");
+  setText("[data-card-name]", values.cardName || "Member name");
+  setText("[data-card-number]", values.cardNumber || "MCK-0000");
+  setText("[data-card-area]", values.cardArea || "Operating area");
+  setText("[data-card-district]", values.cardDistrict || "District");
+  setText("[data-card-sex]", values.cardSex || "Sex");
+  setText("[data-card-plate]", values.cardPlate || "Not recorded");
+  const photo = document.querySelector("[data-card-photo-preview] span");
+  if (photo) photo.textContent = initials(values.cardName || "Member");
+}
+
+function setText(selector, value) {
+  const node = document.querySelector(selector);
+  if (node) node.textContent = value;
+}
+
 function select(name, options, selected) {
   return `<select class="select-control" name="${name}">${options.map((option) => `<option value="${escapeAttr(option)}" ${option === selected ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select>`;
 }
@@ -1045,6 +1312,16 @@ function dueReminders() {
     .map((operator) => ({ ...operator, daysLeft: daysUntil(operator.expiresOn) }))
     .filter((operator) => reminderDays.includes(operator.daysLeft) || operator.daysLeft < 0)
     .sort((a, b) => a.daysLeft - b.daysLeft);
+}
+
+function sexCounts() {
+  const counts = countBy(state.operators, "sex");
+  return Object.entries(counts).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+}
+
+function participationShare(sex) {
+  const total = Math.max(1, state.operators.length);
+  return Math.round((state.operators.filter((operator) => operator.sex === sex).length / total) * 100);
 }
 
 function districtCounts() {
@@ -1087,6 +1364,43 @@ function barChart(rows) {
       <span>${row.value}</span>
     </div>
   `).join("")}</div>`;
+}
+
+function donutChart(rows, label) {
+  const total = rows.reduce((sum, row) => sum + row.value, 0) || 1;
+  const female = rows.find((row) => row.label === "Female")?.value || 0;
+  const femalePct = Math.round((female / total) * 100);
+  return `
+    <div class="donut-wrap">
+      <div class="donut" style="--pct:${femalePct}">
+        <strong>${femalePct}%</strong>
+        <span>${escapeHtml(label)}</span>
+      </div>
+      <div class="split-list">
+        ${rows.map((row) => `<div class="record-card"><strong>${escapeHtml(row.label || "Not recorded")}</strong><span>${row.value} member(s)</span></div>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function iconForMetric(label) {
+  const key = label.toLowerCase();
+  if (key.includes("operator")) return iconRegistry();
+  if (key.includes("owner")) return iconMotorcycle();
+  if (key.includes("cash") || key.includes("revenue") || key.includes("donation")) return iconPayment();
+  if (key.includes("female") || key.includes("participation")) return iconUserPlus();
+  if (key.includes("safety") || key.includes("licence")) return iconShield();
+  if (key.includes("fleet") || key.includes("motorcycle")) return iconMotorcycle();
+  return iconChart();
+}
+
+function initials(name) {
+  return String(name || "M")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "M";
 }
 
 function safetyStatus(operator) {

@@ -1,27 +1,8 @@
 # MACOKASA Kabaza Management System
 
-A static-first web app prototype for the Malawi Coalition for Kabaza Stakeholders Association (MACOKASA). It includes a public website, staff ERP portal, motorcycle owner portal, printing authority view, operator database, memberships, payments, cash accountability, QR ID cards, safety compliance, cooperative loan requests, owner fund tracking, and impact analytics.
+Administrator handoff for the MACOKASA public website, staff ERP, motorcycle owner portal, printing/card portal, operator database, subscriptions, payments, QR cards, safety compliance, cooperative loans, and impact analytics.
 
-## What is included
-
-- Public MACOKASA website with impact stories, data, registration, and donation entry.
-- Operator registration for Regular, Silver, Gold, and Platinum annual memberships.
-- Motorcycle owner subscriptions and motorcycle-to-operator mapping.
-- Bank, POS, AirtelMoney, Mpamba, and Cash payment capture.
-- Cash collector tracking until bank deposit reconciliation.
-- Renewal reminder queue for 4 weeks, 2 weeks, 1 week, 3 days, 2 days, and 1 day before expiry.
-- PVC ID card preview with QR verification token.
-- Replacement/upgrade/downgrade card workflow that invalidates old QR tokens.
-- Licence, helmet, passenger helmet, licence plate, tracker, and ROSAF benefit tracking.
-- Cooperative motorcycle loan request pipeline where MACOKASA can act as guarantor.
-- Owner fund management for income, expenses, target-based agreements, and monthly-pay agreements.
-- Supabase schema and Edge Function starter for reminders.
-- Render static-site deployment config.
-- GitHub Actions syntax verification workflow.
-
-## Local test
-
-This project has no package dependencies. It uses the bundled browser and local JavaScript files.
+## Local Test
 
 ```powershell
 cd "C:\Users\Mada\Documents\Codex\2026-06-20\remove-revenue-receipts-i-find-it\outputs\macokasa-kabaza-system"
@@ -29,59 +10,51 @@ node scripts/write-config.mjs
 node scripts/dev-server.mjs
 ```
 
-Open:
+Open `http://127.0.0.1:4177/`.
 
-```text
-http://127.0.0.1:4177/
+Default local portal passwords:
+
+- Staff ERP: `Macokasa@2026`
+- Motorcycle owner portal: `Owner@2026`
+- Printing portal: `Print@2026`
+
+## Cloudflare Pages
+
+1. Create a Cloudflare Pages project named `macokasa-kabaza-system`.
+2. Set build command to `node scripts/write-config.mjs`.
+3. Set output directory to `public`.
+4. Add the environment variables in `.env.example`.
+5. Deploy manually with:
+
+```powershell
+wrangler pages deploy public --project-name macokasa-kabaza-system
 ```
 
-The app starts in local demo mode and saves changes in browser localStorage.
+The included GitHub Action can also deploy to Cloudflare Pages when these repository secrets exist: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `PUBLIC_BASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `PAYCHANGU_PUBLIC_KEY`, and the three portal password secrets.
 
-## GitHub setup
+## Supabase
 
-1. Create a private GitHub repository.
-2. Push this folder to GitHub.
-3. Keep `.env`, service-role keys, payment provider secrets, SMS secrets, and WhatsApp secrets out of Git.
-4. Use pull requests so MACOKASA can review changes before Render auto-deploys.
-
-## Supabase setup
-
-1. Create a free Supabase project.
-2. Open the SQL editor and run `supabase/schema.sql`.
+1. Create a Supabase project.
+2. Run `supabase/schema.sql` in the SQL editor.
 3. Optionally run `supabase/seed.sql`.
-4. Copy your Project URL and public anon key.
-5. Add those values to Render as `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
+4. Add `SUPABASE_URL` and `SUPABASE_ANON_KEY` to Cloudflare Pages.
+5. Add `SUPABASE_SERVICE_ROLE_KEY` only to Cloudflare Pages function secrets, never to public client config.
 
-The prototype schema uses one JSONB table named `macokasa_records` for speed. Before production, split this into normalized tables, add authenticated roles, and restrict RLS policies by user type.
+## PayChangu
 
-## Render setup
+Add `PAYCHANGU_PUBLIC_KEY` for hosted checkout forms. Add `PAYCHANGU_SECRET_KEY` for the Cloudflare Pages Functions under `/api/paychangu/*`, which initiate and verify transactions server-side.
 
-1. In Render, create a Static Site from the GitHub repository.
-2. Use the included `render.yaml`, or set:
-   - Build command: `node scripts/write-config.mjs`
-   - Publish directory: `public`
-3. Add environment variables:
-   - `SUPABASE_URL`
-   - `SUPABASE_ANON_KEY`
-   - `PUBLIC_BASE_URL`
+## Operations
 
-Render static sites can deploy from GitHub and provide an `onrender.com` URL. Supabase free plan is enough for a lean prototype, but production data volume, file storage, SMS, WhatsApp, and payment callbacks need careful capacity planning.
+- Membership reminders run from the ERP Operations Control screen and record dispatch logs for Email, WhatsApp, and SMS channels.
+- Cash payments require collector name and remain unreconciled until marked deposited.
+- Replacement, upgrade, or downgrade card issuance invalidates the old QR token and queues a new card.
+- The card preview updates live when the operator name, membership class, district, area, sex, plate, or photo changes.
 
-## Data sources used in the prototype
+## Production Hardening
 
-- The Times Group: https://times.mw/0-35-kabaza-operators-registered/
-- Malawi News Agency: https://manaonline.gov.mw/index.php?Itemid=412&id=6065%3Amacokasa-in-kabaza-awareness-campaign&option=com_k2&view=item
-- Nation Online: https://mwnation.com/fresh-drive-to-tame-kabaza/
-- Nyasa Times: https://www.nyasatimes.com/despite-many-accidents-malawians-still-prefer-kabaza/
-- Render Static Sites docs: https://render.com/docs/static-sites
-- Render Free docs: https://render.com/docs/free
-- Supabase pricing: https://supabase.com/pricing
-- Supabase billing and free-plan limits: https://supabase.com/docs/guides/platform/billing-on-supabase
-
-## Production notes
-
-- A copied QR code can still scan. The real control should be live token validation, invalidation on replacement, anti-copy laminate or hologram, card serial number, audit logs, and verification screens.
-- Real card, mobile money, and donation payments need provider callbacks, not only front-end form entries.
-- Real WhatsApp/SMS/email reminders need approved providers and opt-in consent.
-- Private member and owner data needs privacy notices, role-based access, and stricter Supabase RLS.
-- Staff login should use Supabase Auth with roles such as staff, finance, printing, owner, and public verifier.
+- Replace shared review passwords with per-user authentication and role permissions.
+- Configure approved SMS, WhatsApp, and email providers before sending real messages.
+- Tighten Supabase RLS before entering private member data.
+- Store card print files and member photos in private storage with access controls.
+- Keep all service-role, PayChangu secret, and Cloudflare tokens out of Git.
