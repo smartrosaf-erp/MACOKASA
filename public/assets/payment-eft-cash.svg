@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 120" role="img" aria-labelledby="title">
+  <title id="title">EFT cash transfer icon</title>
+  <rect x="16" y="28" width="112" height="66" rx="10" fill="#e8f3ec" stroke="#24794b" stroke-width="6"/>
+  <circle cx="72" cy="61" r="19" fill="#24794b"/>
+  <text x="72" y="69" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="900" fill="#fff">K</text>
+  <path d="M116 20h27v27M143 20 101 62" fill="none" stroke="#ed1b24" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M18 43h108M18 78h108" stroke="#24794b" stroke-width="4" opacity=".35"/>
+</svg>

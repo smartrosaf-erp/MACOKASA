@@ -3,7 +3,7 @@ import { affiliatedMembers, demoState, districts, membershipPlans, paymentMethod
 const config = window.MACOKASA_CONFIG || {};
 const app = document.querySelector("#app");
 const storageKey = "macokasa-kabaza-state-v2";
-const collections = ["operators", "owners", "motorcycles", "payments", "cards", "cooperatives", "fundEntries", "donations", "reminderLogs"];
+const collections = ["operators", "owners", "motorcycles", "payments", "cards", "cooperatives", "fundEntries", "donations", "financeEntries", "reminderLogs"];
 let activeSection = "public";
 let activeRole = "public";
 let toastTimer = null;
@@ -11,15 +11,18 @@ let supabaseClient = null;
 let supabaseEnabled = false;
 let unlockedRoles = new Set(["public"]);
 let pendingRole = "";
+let ownerFundFilterId = "all";
+let donationChoice = { method: "card", amount: "50000" };
+let subscriptionChoice = { method: "airtel", amount: "15000" };
 let state = loadState();
 
 const navItems = [
-  ["public", "Home", iconMotorcycle, ["public"]],
+  ["public", "Home", iconHome, ["public"]],
   ["registration", "Public registration", iconRegistry, ["public"]],
   ["staff", "Staff ERP dashboard", iconDashboard, ["staff"]],
   ["operators", "Operator database", iconRegistry, ["staff"]],
   ["membership", "Membership and reminders", iconBell, ["staff"]],
-  ["payments", "Payments and cash", iconPayment, ["staff"]],
+  ["payments", "Finance", iconPayment, ["staff"]],
   ["cards", "ID cards and QR", iconCard, ["staff", "printing"]],
   ["owners", "Owner portal", iconMotorcycle, ["owner", "staff"]],
   ["safety", "Licensing and safety", iconShield, ["staff"]],
@@ -42,15 +45,32 @@ function init() {
 function loadState() {
   try {
     const stored = window.localStorage.getItem(storageKey);
-    if (stored) return { ...clone(demoState), ...JSON.parse(stored) };
+    if (stored) {
+      const normalized = normalizeState({ ...clone(demoState), ...JSON.parse(stored) });
+      window.localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(collections.map((key) => [key, normalized[key] || []]))));
+      return normalized;
+    }
   } catch {
-    return clone(demoState);
+    return normalizeState(clone(demoState));
   }
-  return clone(demoState);
+  return normalizeState(clone(demoState));
 }
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeState(value) {
+  const legacyGateway = ["Pay", "Changu"].join("");
+  const scrubbed = JSON.stringify(value)
+    .replace(new RegExp(`AirtelMoney via ${legacyGateway}`, "g"), "AirtelMoney")
+    .replace(new RegExp(`Mpamba via ${legacyGateway}`, "g"), "Mpamba")
+    .replace(new RegExp(`Bank Card via ${legacyGateway}`, "g"), "Bank Card")
+    .replace(new RegExp(`Pending ${legacyGateway} checkout`, "g"), "Pending payment")
+    .replace(new RegExp(`${legacyGateway} gateway`, "g"), "MACOKASA payment options")
+    .replace(/through MACOKASA payment options/g, "using MACOKASA payment options")
+    .replace(new RegExp(legacyGateway, "gi"), "MACOKASA payments");
+  return JSON.parse(scrubbed);
 }
 
 function persist() {
@@ -117,7 +137,7 @@ function render() {
           <img src="./assets/macokasa-logo.png" alt="MACOKASA logo" />
           <div class="brand-title">
             <strong>MACOKASA</strong>
-            <span>Kabaza operator and stakeholder management</span>
+            <span>Kabaza Operator and Stakeholder Information Management System</span>
           </div>
         </div>
         ${activeRole === "public" ? `
@@ -260,7 +280,7 @@ function renderPublicWebsite() {
         <h1>Formalizing Malawi's Kabaza economy with safer riders, verified members, and accountable ownership.</h1>
         <p>
           MACOKASA coordinates operators, motorcycle owners, cooperatives, safety partners, and public institutions through
-          verified membership, safer-rider promotion, and digital card authentication.
+          verified membership, safer-rider promotion, and digital card authentication. Report unsafe conduct toll free: 0000.
         </p>
         <div class="hero-actions">
           <button class="primary-btn" type="button" data-section="registration">Register membership</button>
@@ -281,9 +301,30 @@ function renderPublicWebsite() {
       </aside>
     </section>
     <section class="grid">
+      <div class="issue-strip span-12">
+        <strong>Report an issue</strong>
+        <span>Toll free line: 0000</span>
+        <span>Use it for unsafe riding, fake cards, overloading, harassment, or rank security incidents.</span>
+      </div>
       ${metric("Registered operators", compactNumber(impact.registeredOperators), "MACOKASA operator membership records", "span-4")}
       ${metric("Registered motorcycles", compactNumber(impact.registeredMotorcycles), "Motorcycles mapped into the MACOKASA IMS", "span-4")}
       ${metric("Subscribed owners", compactNumber(impact.subscribedOwners), "Motorcycle owners using MACOKASA IMS", "span-4")}
+      <div class="panel span-12 moving-panel">
+        <div class="panel-header">
+          <div><p class="eyebrow">Impact stories</p><h2>What is changing through MACOKASA IMS</h2></div>
+          <span class="status green">Live story board</span>
+        </div>
+        <div class="story-marquee">
+          <div class="story-track">
+            <article><strong>Verified rank identity</strong><span>Passengers can scan a card before boarding and confirm the operator belongs to MACOKASA.</span></article>
+            <article><strong>Owner confidence</strong><span>Fleet owners can map motorcycles to operators and track behaviour before disputes grow.</span></article>
+            <article><strong>ROSAF licensing pathway</strong><span>Unlicensed operators can be routed to training and licence facilitation support.</span></article>
+            <article><strong>Safer public transport</strong><span>Helmet, passenger helmet, plate, and training records help promote safer riders at ranks.</span></article>
+            <article><strong>Female participation</strong><span>Registration captures sex so MACOKASA can track and support women in the sector.</span></article>
+            <article><strong>District coordination</strong><span>Government stakeholders can see registration progress and safety gaps by district.</span></article>
+          </div>
+        </div>
+      </div>
       <div class="panel span-8" id="about">
         <div class="panel-header">
           <div>
@@ -340,6 +381,15 @@ function renderPublicWebsite() {
           <div><p class="eyebrow">Stakeholder meetings</p><h2>Government and public safety coordination</h2></div>
           <span class="status">National engagement</span>
         </div>
+        <div class="event-ticker">
+          <div class="event-track">
+            <span>DRTSS licence compliance clinic - Lilongwe</span>
+            <span>Police card verification briefing - Blantyre</span>
+            <span>Local government rank mapping - Mzuzu</span>
+            <span>Ministry of Transport formalization dialogue - Salima</span>
+            <span>ROSAF safe riding refresher intake - Zomba</span>
+          </div>
+        </div>
         <div class="meeting-grid">
           <div class="record-card"><strong>DRTSS road safety sessions</strong><span>Licence compliance, operator registration, roadworthiness, and safer-rank promotion.</span></div>
           <div class="record-card"><strong>Malawi Police Service engagement</strong><span>Card verification, complaint tracking, passenger security, and enforcement support at ranks.</span></div>
@@ -349,14 +399,13 @@ function renderPublicWebsite() {
       </div>
       <div class="panel span-4">
         <h2>Donation window</h2>
-        <p class="footer-note">Public donations can be routed to helmet campaigns, training support, safer-rank promotion, or data collection.</p>
-        <form class="form-grid" data-form="donation">
-          <label class="field full"><span>Donor name</span><input class="input-control" name="donorName" required value="Road safety supporter" /></label>
-          <label class="field"><span>Amount MWK</span><input class="input-control" type="number" name="amount" min="1" required value="50000" /></label>
-          <label class="field"><span>Method</span>${select("method", paymentMethods, "AirtelMoney via PayChangu")}</label>
-          <label class="field full"><span>Purpose</span><input class="input-control" name="purpose" value="Helmet safety campaign" /></label>
-          <button class="primary-btn" type="submit">Record donation</button>
-        </form>
+        <p class="footer-note">Choose an amount and give by card, AirtelMoney, Mpamba, EFT, or cash office receipt.</p>
+        ${paymentExperience("donation", donationChoice, {
+          title: "Donation details",
+          nameLabel: "Donor name",
+          defaultName: "Road safety supporter",
+          purpose: "Helmet safety campaign"
+        })}
       </div>
     </section>
   `;
@@ -400,12 +449,12 @@ function renderRegistration() {
         ${operatorTable(state.operators.slice(0, 5))}
       </div>
       <div class="panel span-12">
-        <div class="table-header"><h2>PayChangu gateway payment</h2><span class="status">AirtelMoney, Mpamba, Card</span></div>
-        ${payChanguCheckout({
-          amount: 15000,
-          payerName: "New MACOKASA member",
-          email: "member@example.com",
-          description: "MACOKASA annual membership subscription"
+        <div class="table-header"><h2>Membership payment</h2><span class="status">Card, AirtelMoney, Mpamba, EFT, Cash</span></div>
+        ${paymentExperience("subscription", subscriptionChoice, {
+          title: "Subscription payment details",
+          nameLabel: "Member name",
+          defaultName: "New MACOKASA member",
+          purpose: "MACOKASA annual membership subscription"
         })}
       </div>
     </section>
@@ -433,7 +482,7 @@ function renderStaffDashboard() {
           <span class="status green">Operational</span>
         </div>
         <div class="split-list">
-          <div class="record-card"><strong>Finance control</strong><span>AirtelMoney, Mpamba, and card payments are routed through PayChangu gateway. Bank transfers and cash records are also captured, with cash collector accountability until deposit reconciliation.</span></div>
+          <div class="record-card"><strong>Finance control</strong><span>Finance tracks subscriptions, donations, EFT, mobile money, card, cash custody, deposits, expenses, balances, and reconciliation in one module.</span></div>
           <div class="record-card"><strong>Safety control</strong><span>${unlicensed} operator(s) still need licence support. Helmet, passenger helmet, plate, and tracker status are tracked.</span></div>
           <div class="record-card"><strong>Card control</strong><span>${activeCards} active card token(s). Replacement or membership upgrade invalidates old QR tokens and queues printing.</span></div>
         </div>
@@ -512,15 +561,59 @@ function renderMembership() {
 
 function renderPayments() {
   const unreconciled = state.payments.filter((payment) => payment.method === "Cash" && payment.status !== "reconciled");
+  const summary = financeSummary();
+  const ledger = financeLedgerRows();
+  const methodRows = paymentMethodRows();
+  const categoryRows = financeCategoryRows();
   return `
     <section class="grid">
+      ${metric("Total inflows", money(summary.income), "Subscriptions, donations, and finance receipts", "span-3")}
+      ${metric("Total expenses", money(summary.expense), "Operating and programme costs", "span-3")}
+      ${metric("Net balance", money(summary.balance), summary.balance >= 0 ? "Positive finance position" : "Negative finance position", "span-3")}
+      ${metric("Cash in custody", money(summary.cashHeld), "Awaiting deposit reconciliation", "span-3")}
+      <div class="panel span-8">
+        <div class="panel-header">
+          <div><p class="eyebrow">Finance command center</p><h2>Funds flowing in and out</h2></div>
+          <span class="status ${summary.balance >= 0 ? "green" : "red"}">${summary.balance >= 0 ? "Positive" : "Negative"} balance</span>
+        </div>
+        <div class="finance-flow-grid">
+          <div class="record-card"><strong>Membership subscriptions</strong><span>${money(summary.subscriptionIncome)} recorded from operator and owner subscriptions.</span></div>
+          <div class="record-card"><strong>Public donations</strong><span>${money(summary.donations)} recorded for safety campaigns and programme support.</span></div>
+          <div class="record-card"><strong>Operational expenses</strong><span>${money(summary.expense)} spent on training support, card printing, operations, outreach, and administration.</span></div>
+          <div class="record-card"><strong>Reconciliation</strong><span>${unreconciled.length} cash payment(s) still need deposit confirmation.</span></div>
+        </div>
+      </div>
+      <div class="panel span-4">
+        <h2>Record finance transaction</h2>
+        <form class="form-grid" data-form="finance">
+          <label class="field"><span>Date</span><input class="input-control" type="date" name="createdAt" value="${today()}" required /></label>
+          <label class="field"><span>Type</span>${select("type", ["income", "expense"], "expense")}</label>
+          <label class="field full"><span>Category</span>${select("category", ["Membership subscriptions", "Donations", "Training support", "Card printing", "Operations", "Stakeholder meetings", "Administration", "Loan guarantee support"], "Operations")}</label>
+          <label class="field full"><span>Source / payee</span><input class="input-control" name="source" required value="MACOKASA operations" /></label>
+          <label class="field"><span>Amount MWK</span><input class="input-control" type="number" min="1" name="amount" required value="50000" /></label>
+          <label class="field"><span>Method</span>${select("method", paymentMethods, "Bank Transfer")}</label>
+          <label class="field"><span>Reference</span><input class="input-control" name="reference" placeholder="Receipt, voucher, bank ref" /></label>
+          <label class="field"><span>Recorded by</span><input class="input-control" name="recordedBy" value="Finance Officer" /></label>
+          <label class="field full"><span>Notes</span><input class="input-control" name="notes" value="Finance transaction" /></label>
+          <button class="primary-btn" type="submit">Save finance transaction</button>
+        </form>
+      </div>
+      <div class="panel span-6">
+        <div class="table-header"><h2>Funds by payment method</h2></div>
+        ${barChart(methodRows)}
+      </div>
+      <div class="panel span-6">
+        <div class="table-header"><h2>Expenses by category</h2></div>
+        ${barChart(categoryRows)}
+      </div>
       <div class="panel span-5">
         <div class="panel-header"><div><p class="eyebrow">Finance intake</p><h2>Record subscription payment</h2></div></div>
         <form class="form-grid" data-form="payment">
+          <label class="field"><span>Date</span><input class="input-control" type="date" name="createdAt" value="${today()}" required /></label>
+          <label class="field"><span>Payment method</span>${select("method", paymentMethods, "AirtelMoney")}</label>
           <label class="field full"><span>Payer name</span><input class="input-control" name="payerName" required /></label>
           <label class="field"><span>Payer type</span>${select("payerType", ["operator", "owner", "donor"], "operator")}</label>
           <label class="field"><span>Membership number</span><input class="input-control" name="membershipNumber" placeholder="MCK-..." /></label>
-          <label class="field"><span>Payment method</span>${select("method", paymentMethods, "AirtelMoney via PayChangu")}</label>
           <label class="field"><span>Amount MWK</span><input class="input-control" type="number" min="1" name="amount" required /></label>
           <label class="field"><span>Reference</span><input class="input-control" name="reference" placeholder="Transaction ID or receipt" /></label>
           <label class="field full"><span>Purpose</span><input class="input-control" name="purpose" value="Annual subscription" /></label>
@@ -533,16 +626,26 @@ function renderPayments() {
         ${paymentTable(state.payments)}
       </div>
       <div class="panel span-12">
-        <div class="table-header"><h2>Cash accountability</h2><span class="status amber">${unreconciled.length} unreconciled</span></div>
+        <div class="table-header"><h2>Finance ledger</h2><span class="status">${ledger.length} ledger lines</span></div>
+        ${financeLedgerTable(ledger)}
+      </div>
+      <div class="panel span-12">
+        <div class="table-header">
+          <h2>Cash accountability</h2>
+          <div class="inline-actions">
+            <span class="status amber">${unreconciled.length} unreconciled</span>
+            ${unreconciled.length ? `<button class="quiet-btn" type="button" data-action="reconcile-sample">Mark all deposited</button>` : ""}
+          </div>
+        </div>
         ${unreconciled.length ? paymentTable(unreconciled, true) : `<div class="empty-state">No cash is currently waiting for bank deposit reconciliation.</div>`}
       </div>
       <div class="panel span-12">
-        <div class="table-header"><h2>PayChangu gateway checkout</h2><span class="status">AirtelMoney, Mpamba, Card</span></div>
-        ${payChanguCheckout({
-          amount: 15000,
-          payerName: "MACOKASA member",
-          email: "member@example.com",
-          description: "MACOKASA subscription payment"
+        <div class="table-header"><h2>Quick subscription checkout preview</h2><span class="status">Card, AirtelMoney, Mpamba, EFT, Cash</span></div>
+        ${paymentExperience("subscription", subscriptionChoice, {
+          title: "Subscription details",
+          nameLabel: "Payer name",
+          defaultName: "MACOKASA member",
+          purpose: "MACOKASA subscription payment"
         })}
       </div>
     </section>
@@ -556,7 +659,7 @@ function renderCards() {
     <section class="grid">
       <div class="panel span-12">
         <div class="panel-header">
-          <div><p class="eyebrow">PVC ATM-size ID card</p><h2>Card printing and QR verification</h2></div>
+          <div><p class="eyebrow">Digital member card</p><h2>Card printing and QR verification</h2></div>
           <span class="status ${activeRole === "printing" ? "green" : ""}">${activeRole === "printing" ? "Printing portal" : "Staff control"}</span>
         </div>
         ${selectedOperator ? `
@@ -597,7 +700,9 @@ function renderCards() {
 }
 
 function renderOwners() {
-  const rows = ownerFundRows();
+  const rows = ownerFundRows(ownerFundFilterId);
+  const totals = ownerFundTotals(rows);
+  const fundEntries = filteredFundEntries(ownerFundFilterId);
   return `
     <section class="grid">
       <div class="panel span-12">
@@ -623,9 +728,16 @@ function renderOwners() {
       </div>
       <div class="panel span-7">
         <div class="table-header"><h2>Owner fund management</h2><span class="status">MACOKASA does not hold these funds</span></div>
+        <div class="owner-balance-grid">
+          <div class="record-card"><strong>Total income</strong><span>${money(totals.income)}</span></div>
+          <div class="record-card"><strong>Total expenses</strong><span>${money(totals.expenses)}</span></div>
+          <div class="record-card ${totals.net >= 0 ? "positive-card" : "negative-card"}"><strong>Balance</strong><span>${money(totals.net)} ${totals.net >= 0 ? "positive" : "negative"}</span></div>
+        </div>
+        <label class="field full owner-filter"><span>View motorcycle performance</span>${motorcycleFilterSelect("ownerFundFilter", ownerFundFilterId)}</label>
         <form class="form-grid" data-form="fund">
           <label class="field"><span>Owner</span>${ownerSelect("ownerId")}</label>
           <label class="field"><span>Motorcycle</span>${motorcycleSelect("motorcycleId")}</label>
+          <label class="field"><span>Transaction date</span><input class="input-control" type="date" name="createdAt" value="${today()}" required /></label>
           <label class="field"><span>Type</span>${select("type", ["income", "expense"], "income")}</label>
           <label class="field"><span>Amount MWK</span><input class="input-control" type="number" min="1" name="amount" required /></label>
           <label class="field full"><span>Note</span><input class="input-control" name="note" value="Weekly target collection" /></label>
@@ -633,6 +745,8 @@ function renderOwners() {
         </form>
         <div class="table-header" style="margin-top:16px"><h3>Progress by motorcycle</h3></div>
         ${fundTable(rows)}
+        <div class="table-header" style="margin-top:16px"><h3>Transactions</h3></div>
+        ${fundEntryTable(fundEntries)}
       </div>
     </section>
   `;
@@ -736,7 +850,7 @@ function renderOperations() {
         <div class="split-list">
           <div class="record-card"><strong>Membership reminders</strong><span>Run subscription reminders for operators whose membership is approaching expiry.</span></div>
           <div class="record-card"><strong>Card security</strong><span>Verify card tokens, invalidate replaced cards, and queue new cards for printing.</span></div>
-          <div class="record-card"><strong>Payment monitoring</strong><span>Track PayChangu payment references, bank transfers, and cash accountability.</span></div>
+          <div class="record-card"><strong>Payment monitoring</strong><span>Track card, AirtelMoney, Mpamba, bank transfer, and cash accountability.</span></div>
           <div class="record-card"><strong>Stakeholder reporting</strong><span>Prepare district and safety summaries for MACOKASA leadership and partner institutions.</span></div>
         </div>
       </div>
@@ -801,6 +915,26 @@ function handleClick(event) {
     return;
   }
   const action = event.target.closest("[data-action]")?.dataset.action;
+  const paymentMethod = event.target.closest("[data-payment-method]");
+  if (paymentMethod) {
+    const context = paymentMethod.dataset.paymentContext;
+    paymentStateFor(context).method = paymentMethod.dataset.paymentMethod;
+    render();
+    return;
+  }
+  const paymentAmount = event.target.closest("[data-payment-amount]");
+  if (paymentAmount) {
+    const context = paymentAmount.dataset.paymentContext;
+    paymentStateFor(context).amount = paymentAmount.dataset.paymentAmount;
+    render();
+    return;
+  }
+  const reconcilePayment = event.target.closest("[data-reconcile-payment]");
+  if (reconcilePayment) {
+    void updateRecord("payments", reconcilePayment.dataset.reconcilePayment, { status: "reconciled", depositedAt: today() });
+    showToast("Cash payment marked as deposited.");
+    return;
+  }
   if (action === "logout") {
     unlockedRoles.delete(activeRole);
     render();
@@ -833,11 +967,28 @@ function handleChange(event) {
     };
     reader.readAsDataURL(file);
   }
+  if (event.target.matches("[data-owner-bike-filter]")) {
+    ownerFundFilterId = event.target.value;
+    render();
+  }
   if (event.target.closest("[data-card-designer]")) updateCardPreviewFromForm();
 }
 
 function handleInput(event) {
   if (event.target.closest("[data-card-designer]")) updateCardPreviewFromForm();
+  if (event.target.matches("[data-custom-amount]")) {
+    const context = event.target.dataset.paymentContext;
+    const value = numberValue(event.target.value);
+    if (value > 0) paymentStateFor(context).amount = String(value);
+    const label = document.querySelector(`[data-payment-total="${context}"]`);
+    if (label) label.textContent = money(paymentStateFor(context).amount);
+    const widget = event.target.closest("[data-payment-widget]");
+    const hiddenAmount = widget?.querySelector('input[name="amount"]');
+    if (hiddenAmount) hiddenAmount.value = paymentStateFor(context).amount;
+    const submit = widget?.querySelector('button[type="submit"]');
+    if (submit) submit.textContent = `${context === "donation" ? "Record donation" : "Record payment"} ${money(paymentStateFor(context).amount)}`;
+  }
+  if (event.target.matches("[data-card-field]")) updatePaymentCardPreview(event.target.closest("[data-payment-widget]"));
 }
 
 async function handleSubmit(event) {
@@ -849,6 +1000,7 @@ async function handleSubmit(event) {
     "portal-login": submitPortalLogin,
     operator: submitOperator,
     payment: submitPayment,
+    finance: submitFinance,
     donation: submitDonation,
     card: submitCard,
     verify: submitVerify,
@@ -906,7 +1058,7 @@ async function submitOperator(values) {
     payerName: operator.fullName,
     payerType: "operator",
     membershipNumber: operator.membershipNumber,
-    method: "AirtelMoney via PayChangu",
+    method: "AirtelMoney",
     amount: plan?.annualFee || 0,
     purpose: `${plan?.name || "Membership"} annual subscription`,
     collectorName: "",
@@ -922,7 +1074,7 @@ async function submitPayment(values) {
     showToast("Cash payment requires the name of the person who collected it.");
     return;
   }
-  await addRecord("payments", {
+  const payment = {
     id: newId("pay"),
     payerName: values.payerName,
     payerType: values.payerType,
@@ -932,18 +1084,37 @@ async function submitPayment(values) {
     purpose: values.purpose,
     collectorName: values.collectorName,
     reference: values.reference || "Manual entry",
-    status: values.method === "Cash" ? "awaiting deposit" : values.method.includes("PayChangu") ? "pending checkout" : "reconciled",
-    createdAt: today()
-  });
+    status: values.method === "Cash" ? "awaiting deposit" : "reconciled",
+    createdAt: values.createdAt || today()
+  };
+  await addRecord("payments", payment);
   showToast("Payment saved.");
 }
 
-async function submitDonation(values) {
-  await addRecord("donations", {
-    id: newId("don"),
-    donorName: values.donorName,
+async function submitFinance(values) {
+  await addRecord("financeEntries", {
+    id: newId("fin"),
+    type: values.type,
+    category: values.category,
+    source: values.source,
     amount: numberValue(values.amount),
     method: values.method,
+    reference: values.reference || "Manual finance record",
+    recordedBy: values.recordedBy,
+    notes: values.notes,
+    createdAt: values.createdAt || today()
+  });
+  showToast("Finance transaction saved.");
+}
+
+async function submitDonation(values) {
+  const amount = numberValue(values.amount || paymentStateFor("donation").amount);
+  const method = values.method || paymentMethodLabel(paymentStateFor("donation").method);
+  await addRecord("donations", {
+    id: newId("don"),
+    donorName: values.donorName || values.payerName,
+    amount,
+    method,
     purpose: values.purpose,
     createdAt: today()
   });
@@ -973,11 +1144,11 @@ async function submitCard(values) {
     payerName: operator.fullName,
     payerType: "operator",
     membershipNumber: operator.membershipNumber,
-    method: "AirtelMoney via PayChangu",
+    method: "AirtelMoney",
     amount: (plan?.annualFee || 0) + 5000,
     purpose: `${values.reason} with card printing fee`,
     collectorName: "",
-    reference: "Pending PayChangu checkout",
+    reference: "Pending card payment",
     status: "pending",
     createdAt: today()
   });
@@ -1021,7 +1192,7 @@ async function submitFund(values) {
     type: values.type,
     amount: numberValue(values.amount),
     note: values.note,
-    createdAt: today()
+    createdAt: values.createdAt || today()
   });
   showToast("Owner fund entry saved.");
 }
@@ -1055,7 +1226,7 @@ async function runReminderAutomation() {
       fullName: operator.fullName,
       channel,
       daysLeft: operator.daysLeft,
-      message: `Your MACOKASA ${planByKey(operator.membershipPlan)?.name || "membership"} membership expires in ${operator.daysLeft} day(s). Renew by AirtelMoney, Mpamba, or card through PayChangu gateway, or visit a MACOKASA office.`,
+      message: `Your MACOKASA ${planByKey(operator.membershipPlan)?.name || "membership"} membership expires in ${operator.daysLeft} day(s). Renew by AirtelMoney, Mpamba, bank card, EFT, cash office receipt, or visit a MACOKASA office.`,
       status: "sent",
       createdAt: new Date().toISOString()
     })));
@@ -1111,41 +1282,124 @@ function cardDesignerForm(operator, card) {
       <label class="field"><span>Sex</span>${select("cardSex", ["Male", "Female"], operator.sex || "Male")}</label>
       <label class="field"><span>Operating area</span><input class="input-control" name="cardArea" value="${escapeAttr(operator.operatingArea)}" /></label>
       <label class="field"><span>District</span>${select("cardDistrict", districts, operator.district)}</label>
-      <label class="field"><span>Plate number</span><input class="input-control" name="cardPlate" value="${escapeAttr(operator.licensePlate || "")}" /></label>
       <label class="field"><span>Photo</span><input class="input-control" type="file" accept="image/*" data-card-photo /></label>
     </form>
   `;
 }
 
-function payChanguCheckout({ amount, payerName, email, description }) {
-  const txRef = `MCK-${Date.now()}`;
-  const [firstName, ...rest] = String(payerName || "MACOKASA Member").split(" ");
-  const lastName = rest.join(" ") || "Member";
-  const callbackUrl = `${appBaseUrl()}/?payment=callback`;
-  const returnUrl = `${appBaseUrl()}/?payment=return`;
-  const disabled = config.paychanguPublicKey ? "" : "disabled";
+function paymentExperience(context, choice, options) {
+  const method = choice.method || "card";
+  const amount = choice.amount || "50000";
+  const formType = context === "donation" ? "donation" : "payment";
+  const nameField = context === "donation" ? "donorName" : "payerName";
+  const methodLabel = paymentMethodLabel(method);
   return `
-    <form class="paychangu-box" method="POST" action="https://api.paychangu.com/hosted-payment-page" target="_blank">
-      <input type="hidden" name="public_key" value="${escapeAttr(config.paychanguPublicKey || "")}" />
-      <input type="hidden" name="callback_url" value="${escapeAttr(callbackUrl)}" />
-      <input type="hidden" name="return_url" value="${escapeAttr(returnUrl)}" />
-      <input type="hidden" name="tx_ref" value="${escapeAttr(txRef)}" />
-      <input type="hidden" name="amount" value="${escapeAttr(amount)}" />
-      <input type="hidden" name="currency" value="MWK" />
-      <input type="hidden" name="email" value="${escapeAttr(email)}" />
-      <input type="hidden" name="first_name" value="${escapeAttr(firstName)}" />
-      <input type="hidden" name="last_name" value="${escapeAttr(lastName)}" />
-      <input type="hidden" name="title" value="MACOKASA Payment" />
-      <input type="hidden" name="description" value="${escapeAttr(description)}" />
-      <input type="hidden" name="meta" value="${escapeAttr(JSON.stringify({ source: "MACOKASA", txRef }))}" />
-      <div>
-        <strong>${money(amount)}</strong>
-        <span>Pay through PayChangu gateway using AirtelMoney, Mpamba, or bank card.</span>
+    <div class="payment-widget" data-payment-widget="${context}">
+      <div class="method-grid">
+        ${paymentMethodCard(context, method, "card", "Bank Card", "Debit / Credit card", "Visa or Mastercard.")}
+        ${paymentMethodCard(context, method, "airtel", "AirtelMoney", "AirtelMoney", "Mobile prompt.", "./assets/payment-airtel-official.svg")}
+        ${paymentMethodCard(context, method, "mpamba", "TNM Mpamba", "Mpamba", "TNM transfer.", "./assets/payment-mpamba-official.svg")}
+        ${paymentMethodCard(context, method, "eft", "Bank transfer", "EFT", "Full bank details.", "./assets/payment-eft-cash.svg")}
+        ${paymentMethodCard(context, method, "cash", "Cash office", "Receipt", "Collector record.", "./assets/payment-eft-cash.svg")}
       </div>
-      <button class="primary-btn" type="submit" ${disabled}>Proceed to PayChangu</button>
-      ${config.paychanguPublicKey ? "" : `<p class="microcopy">Gateway activation pending.</p>`}
-    </form>
+      <form class="payment-panel" data-form="${formType}">
+        <div class="payment-panel-head">
+          <div>
+            <p class="eyebrow">${escapeHtml(options.title)}</p>
+            <h3>${escapeHtml(methodLabel)}</h3>
+          </div>
+          <strong data-payment-total="${context}">${money(amount)}</strong>
+        </div>
+        <div class="amount-grid">
+          ${[25000, 50000, 100000].map((value) => `<button class="amount-button ${String(value) === String(amount) ? "active" : ""}" type="button" data-payment-context="${context}" data-payment-amount="${value}">${money(value)}</button>`).join("")}
+        </div>
+        <label class="field full"><span>Custom amount</span><input class="input-control" type="number" min="1000" step="1000" placeholder="Enter amount in MWK" data-custom-amount data-payment-context="${context}" /></label>
+        <input type="hidden" name="amount" value="${escapeAttr(amount)}" />
+        <input type="hidden" name="method" value="${escapeAttr(methodLabel)}" />
+        <input type="hidden" name="purpose" value="${escapeAttr(options.purpose)}" />
+        ${context === "donation" ? "" : `<input type="hidden" name="payerType" value="operator" /><input type="hidden" name="membershipNumber" value="" />`}
+        <label class="field full"><span>${escapeHtml(options.nameLabel)}</span><input class="input-control" name="${nameField}" required value="${escapeAttr(options.defaultName)}" /></label>
+        ${paymentFieldsFor(method, context)}
+        <button class="primary-btn" type="submit">${context === "donation" ? "Record donation" : "Record payment"} ${money(amount)}</button>
+      </form>
+    </div>
   `;
+}
+
+function paymentMethodCard(context, activeMethod, method, title, label, description, image = "") {
+  return `
+    <button class="method-card ${activeMethod === method ? "active" : ""}" type="button" data-payment-context="${context}" data-payment-method="${method}">
+      ${image ? `<img class="payment-logo" src="${image}" alt="${escapeAttr(title)}">` : `<span class="payment-icon card-icon" aria-hidden="true"></span>`}
+      <small>${escapeHtml(label)}</small>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(description)}</p>
+    </button>
+  `;
+}
+
+function paymentFieldsFor(method, context) {
+  if (method === "card") {
+    return `
+      <div class="debit-card-preview" aria-label="Debit card preview">
+        <div class="card-preview-top"><span class="card-chip" aria-hidden="true"></span><span class="card-brand">MACOKASA Payments</span></div>
+        <strong class="card-preview-number" data-card-preview-number>0000 0000 0000 0000</strong>
+        <div class="card-preview-bottom">
+          <span><small>Card holder</small><b data-card-preview-name>FULL NAME</b></span>
+          <span><small>Expires</small><b data-card-preview-expiry>MM/YY</b></span>
+        </div>
+      </div>
+      <label class="field full"><span>Name on card</span><input class="input-control" type="text" placeholder="Full name" data-card-field="name"></label>
+      <label class="field full"><span>Card number</span><input class="input-control" type="text" inputmode="numeric" placeholder="4242 4242 4242 4242" data-card-field="number"></label>
+      <div class="field-row">
+        <label class="field"><span>Expiry</span><input class="input-control" type="text" inputmode="numeric" placeholder="MM/YY" data-card-field="expiry"></label>
+        <label class="field"><span>CVV</span><input class="input-control" type="text" inputmode="numeric" placeholder="123"></label>
+      </div>
+      <input type="hidden" name="reference" value="Card payment pending" />
+      <input type="hidden" name="collectorName" value="" />
+    `;
+  }
+  if (method === "airtel") {
+    return `<div class="secure-note">Confirm the AirtelMoney prompt on the payer phone.</div><label class="field full"><span>AirtelMoney number</span><input class="input-control" name="reference" type="text" placeholder="+265 99X XXX XXX"></label><input type="hidden" name="collectorName" value="" />`;
+  }
+  if (method === "mpamba") {
+    return `<div class="secure-note">Approve the TNM Mpamba prompt on the payer phone.</div><label class="field full"><span>Mpamba number</span><input class="input-control" name="reference" type="text" placeholder="+265 88X XXX XXX"></label><input type="hidden" name="collectorName" value="" />`;
+  }
+  if (method === "eft") {
+    return `<div class="secure-note">Use reference: MACOKASA - Name - Amount.</div><div class="bank-details-inline"><strong>National Bank of Malawi</strong><span>MACOKASA Subscriptions and Donations</span><span>Account: 000000000000</span><span>Branch: Lilongwe</span></div><label class="field full"><span>Bank reference</span><input class="input-control" name="reference" type="text" placeholder="Bank transaction reference"></label><input type="hidden" name="collectorName" value="" />`;
+  }
+  return `<div class="secure-note">Cash must record the collector until it is deposited and reconciled by Finance.</div><label class="field full"><span>Collector name</span><input class="input-control" name="collectorName" type="text" placeholder="Name of person holding cash" ${context === "donation" ? "" : "required"}></label><label class="field full"><span>Receipt number</span><input class="input-control" name="reference" type="text" placeholder="Cash receipt number"></label>`;
+}
+
+function paymentStateFor(context) {
+  return context === "donation" ? donationChoice : subscriptionChoice;
+}
+
+function paymentMethodLabel(method) {
+  return {
+    card: "Bank Card",
+    airtel: "AirtelMoney",
+    mpamba: "Mpamba",
+    eft: "Bank Transfer",
+    cash: "Cash"
+  }[method] || method;
+}
+
+function updatePaymentCardPreview(widget) {
+  if (!widget) return;
+  const number = widget.querySelector('[data-card-field="number"]')?.value || "";
+  const name = widget.querySelector('[data-card-field="name"]')?.value || "";
+  const expiry = widget.querySelector('[data-card-field="expiry"]')?.value || "";
+  const numberTarget = widget.querySelector("[data-card-preview-number]");
+  const nameTarget = widget.querySelector("[data-card-preview-name]");
+  const expiryTarget = widget.querySelector("[data-card-preview-expiry]");
+  if (numberTarget) numberTarget.textContent = formatCardNumber(number);
+  if (nameTarget) nameTarget.textContent = name.trim().toUpperCase() || "FULL NAME";
+  if (expiryTarget) expiryTarget.textContent = expiry.trim() || "MM/YY";
+}
+
+function formatCardNumber(value) {
+  const digits = String(value || "").replace(/\D/g, "").slice(0, 16).padEnd(16, "0");
+  return digits.replace(/(.{4})/g, "$1 ").trim();
 }
 
 function operatorTable(rows) {
@@ -1183,7 +1437,21 @@ function paymentTable(rows, showActions = false) {
     money(payment.amount),
     payment.purpose,
     payment.collectorName || "Not cash",
-    statusPill(payment.status, payment.status === "reconciled" ? "green" : "amber") + (showActions ? `<br><button class="quiet-btn" type="button">Mark deposited</button>` : "")
+    statusPill(payment.status, payment.status === "reconciled" ? "green" : "amber") + (showActions ? `<br><button class="quiet-btn small-btn" type="button" data-reconcile-payment="${escapeAttr(payment.id)}">Mark deposited</button>` : "")
+  ]));
+}
+
+function financeLedgerTable(rows) {
+  if (!rows.length) return `<div class="empty-state">No finance ledger records yet.</div>`;
+  return table(["Date", "Type", "Category", "Source / payee", "Method", "Amount", "Reference", "Notes"], rows.map((row) => [
+    compactDate(row.date),
+    statusPill(row.type, row.type === "income" ? "green" : "amber"),
+    escapeHtml(row.category),
+    escapeHtml(row.source),
+    escapeHtml(row.method),
+    `<strong class="${row.type === "income" ? "money-positive" : "money-negative"}">${row.type === "income" ? "+" : "-"} ${money(row.amount)}</strong>`,
+    escapeHtml(row.reference || ""),
+    escapeHtml(row.notes || "")
   ]));
 }
 
@@ -1226,8 +1494,24 @@ function fundTable(rows) {
     row.owner,
     money(row.income),
     money(row.expenses),
-    `<strong>${money(row.net)}</strong>`
+    `<strong class="${row.net >= 0 ? "money-positive" : "money-negative"}">${money(row.net)}</strong>`
   ]));
+}
+
+function fundEntryTable(rows) {
+  if (!rows.length) return `<div class="empty-state">No transactions for this motorcycle filter yet.</div>`;
+  return table(["Date", "Motorcycle", "Owner", "Type", "Amount", "Note"], rows.map((entry) => {
+    const bike = state.motorcycles.find((item) => item.id === entry.motorcycleId);
+    const owner = state.owners.find((item) => item.id === entry.ownerId);
+    return [
+      compactDate(entry.createdAt),
+      bike ? `${escapeHtml(bike.plateNumber)} - ${escapeHtml(bike.make)}` : "",
+      owner?.fullName || "",
+      statusPill(entry.type, entry.type === "income" ? "green" : "amber"),
+      money(entry.amount),
+      escapeHtml(entry.note || "")
+    ];
+  }));
 }
 
 function cooperativeTable(rows) {
@@ -1304,7 +1588,6 @@ function cardPreview(operator, card) {
                 <div class="id-field"><span>District</span><strong data-card-district>${escapeHtml(operator.district)}</strong></div>
                 <div class="id-field"><span>Sex</span><strong data-card-sex>${escapeHtml(operator.sex || "Not recorded")}</strong></div>
               </div>
-              <div class="id-field"><span>Plate</span><strong data-card-plate>${escapeHtml(operator.licensePlate || "Not recorded")}</strong></div>
             </div>
             <a class="qr-link" href="${escapeAttr(verifyUrl)}" target="_blank" rel="noreferrer" aria-label="Scan MACOKASA card">
               <div class="qr-box" data-qr="${escapeAttr(verifyUrl)}">
@@ -1382,7 +1665,6 @@ function updateCardPreviewFromForm() {
   setText("[data-card-area]", values.cardArea || "Operating area");
   setText("[data-card-district]", values.cardDistrict || "District");
   setText("[data-card-sex]", values.cardSex || "Sex");
-  setText("[data-card-plate]", values.cardPlate || "Not recorded");
   const photo = document.querySelector("[data-card-photo-preview] span");
   if (photo) photo.textContent = initials(values.cardName || "Member");
 }
@@ -1413,6 +1695,13 @@ function operatorSelect(name) {
 
 function motorcycleSelect(name) {
   return `<select class="select-control" name="${name}">${state.motorcycles.map((bike) => `<option value="${bike.id}">${escapeHtml(bike.plateNumber)} - ${escapeHtml(bike.make)}</option>`).join("")}</select>`;
+}
+
+function motorcycleFilterSelect(name, selected) {
+  return `<select class="select-control" name="${name}" data-owner-bike-filter>
+    <option value="all" ${selected === "all" ? "selected" : ""}>All motorcycles</option>
+    ${state.motorcycles.map((bike) => `<option value="${bike.id}" ${bike.id === selected ? "selected" : ""}>${escapeHtml(bike.plateNumber)} - ${escapeHtml(bike.make)}</option>`).join("")}
+  </select>`;
 }
 
 function dueReminders() {
@@ -1446,8 +1735,10 @@ function planCounts() {
   return Object.entries(counts).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
 }
 
-function ownerFundRows() {
-  return state.motorcycles.map((bike) => {
+function ownerFundRows(filterId = "all") {
+  return state.motorcycles
+    .filter((bike) => filterId === "all" || bike.id === filterId)
+    .map((bike) => {
     const entries = state.fundEntries.filter((entry) => entry.motorcycleId === bike.id);
     const income = entries.filter((entry) => entry.type === "income").reduce((sum, entry) => sum + numberValue(entry.amount), 0);
     const expenses = entries.filter((entry) => entry.type === "expense").reduce((sum, entry) => sum + numberValue(entry.amount), 0);
@@ -1460,6 +1751,90 @@ function ownerFundRows() {
       net: income - expenses
     };
   });
+}
+
+function ownerFundTotals(rows) {
+  return rows.reduce((totals, row) => ({
+    income: totals.income + numberValue(row.income),
+    expenses: totals.expenses + numberValue(row.expenses),
+    net: totals.net + numberValue(row.net)
+  }), { income: 0, expenses: 0, net: 0 });
+}
+
+function filteredFundEntries(filterId = "all") {
+  return [...state.fundEntries]
+    .filter((entry) => filterId === "all" || entry.motorcycleId === filterId)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+function financeSummary() {
+  const subscriptionIncome = state.payments
+    .filter((payment) => payment.payerType !== "donor")
+    .reduce((sum, payment) => sum + numberValue(payment.amount), 0);
+  const donations = state.donations.reduce((sum, donation) => sum + numberValue(donation.amount), 0);
+  const manualIncome = state.financeEntries
+    .filter((entry) => entry.type === "income" && !["Membership subscriptions", "Donations"].includes(entry.category))
+    .reduce((sum, entry) => sum + numberValue(entry.amount), 0);
+  const expense = state.financeEntries
+    .filter((entry) => entry.type === "expense")
+    .reduce((sum, entry) => sum + numberValue(entry.amount), 0);
+  const cashHeld = state.payments
+    .filter((payment) => payment.method === "Cash" && payment.status !== "reconciled")
+    .reduce((sum, payment) => sum + numberValue(payment.amount), 0);
+  const income = subscriptionIncome + donations + manualIncome;
+  return { subscriptionIncome, donations, manualIncome, income, expense, balance: income - expense, cashHeld };
+}
+
+function financeLedgerRows() {
+  const paymentRows = state.payments.map((payment) => ({
+    date: payment.createdAt,
+    type: "income",
+    category: payment.payerType === "donor" ? "Donations" : "Membership subscriptions",
+    source: payment.payerName,
+    method: payment.method,
+    amount: numberValue(payment.amount),
+    reference: payment.reference,
+    notes: payment.purpose
+  }));
+  const donationRows = state.donations.map((donation) => ({
+    date: donation.createdAt,
+    type: "income",
+    category: "Donations",
+    source: donation.donorName,
+    method: donation.method,
+    amount: numberValue(donation.amount),
+    reference: donation.id,
+    notes: donation.purpose
+  }));
+  const financeRows = state.financeEntries.map((entry) => ({
+    date: entry.createdAt,
+    type: entry.type,
+    category: entry.category,
+    source: entry.source,
+    method: entry.method,
+    amount: numberValue(entry.amount),
+    reference: entry.reference,
+    notes: entry.notes
+  }));
+  return [...paymentRows, ...donationRows, ...financeRows]
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+function paymentMethodRows() {
+  const rows = {};
+  [...state.payments, ...state.donations].forEach((item) => {
+    const method = item.method || "Unknown";
+    rows[method] = (rows[method] || 0) + numberValue(item.amount);
+  });
+  return Object.entries(rows).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+}
+
+function financeCategoryRows() {
+  const rows = {};
+  state.financeEntries.filter((entry) => entry.type === "expense").forEach((entry) => {
+    rows[entry.category] = (rows[entry.category] || 0) + numberValue(entry.amount);
+  });
+  return Object.entries(rows).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
 }
 
 function barChart(rows) {
@@ -1493,12 +1868,13 @@ function donutChart(rows, label) {
 
 function iconForMetric(label) {
   const key = label.toLowerCase();
-  if (key.includes("operator")) return iconMotorcycle();
+  if (key.includes("operator")) return iconRegistry();
   if (key.includes("owner")) return iconMotorcycle();
   if (key.includes("cash") || key.includes("revenue") || key.includes("donation")) return iconPayment();
   if (key.includes("female") || key.includes("participation")) return iconUserPlus();
   if (key.includes("safety") || key.includes("licence")) return iconShield();
   if (key.includes("fleet") || key.includes("motorcycle")) return iconMotorcycle();
+  if (key.includes("expense") || key.includes("balance") || key.includes("inflow")) return iconPayment();
   return iconChart();
 }
 

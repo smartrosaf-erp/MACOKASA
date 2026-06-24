@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 const config = {
   supabaseUrl: process.env.SUPABASE_URL || "",
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "",
-  paychanguPublicKey: process.env.PAYCHANGU_PUBLIC_KEY || "",
   useDemoData: !process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY,
   publicBaseUrl: process.env.PUBLIC_BASE_URL || "http://127.0.0.1:4177",
   portalPasswords: {

@@ -17,6 +17,7 @@ create table if not exists public.macokasa_records (
       'cooperatives',
       'fundEntries',
       'donations',
+      'financeEntries',
       'reminderLogs'
     )
   ),
@@ -51,18 +52,6 @@ create table if not exists public.reminder_jobs (
   created_at timestamptz not null default now()
 );
 
-create table if not exists public.paychangu_transactions (
-  id uuid primary key default gen_random_uuid(),
-  tx_ref text not null unique,
-  amount numeric,
-  currency text default 'MWK',
-  payer_name text,
-  status text not null default 'pending',
-  payload jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
@@ -78,15 +67,9 @@ create trigger macokasa_records_touch_updated_at
 before update on public.macokasa_records
 for each row execute function public.touch_updated_at();
 
-drop trigger if exists paychangu_transactions_touch_updated_at on public.paychangu_transactions;
-create trigger paychangu_transactions_touch_updated_at
-before update on public.paychangu_transactions
-for each row execute function public.touch_updated_at();
-
 alter table public.macokasa_records enable row level security;
 alter table public.card_verifications enable row level security;
 alter table public.reminder_jobs enable row level security;
-alter table public.paychangu_transactions enable row level security;
 
 -- Review policies for testing the shared app.
 -- Replace these with authenticated role policies before entering real member data.
@@ -125,19 +108,6 @@ drop policy if exists "Staff insert reminders" on public.reminder_jobs;
 create policy "Staff insert reminders"
 on public.reminder_jobs for insert
 to anon, authenticated
-with check (true);
-
-drop policy if exists "Staff read payment transactions" on public.paychangu_transactions;
-create policy "Staff read payment transactions"
-on public.paychangu_transactions for select
-to authenticated
-using (true);
-
-drop policy if exists "Service write payment transactions" on public.paychangu_transactions;
-create policy "Service write payment transactions"
-on public.paychangu_transactions for all
-to service_role
-using (true)
 with check (true);
 
 create or replace view public.operator_membership_summary as

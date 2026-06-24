@@ -7,6 +7,6 @@
     "dev": "node scripts/dev-server.mjs",
     "build": "node scripts/write-config.mjs",
     "deploy:cloudflare": "wrangler pages deploy public --project-name macokasa-kabaza-system",
-    "check": "node --check src/app.js && node --check src/data.js && node --check scripts/dev-server.mjs && node --check scripts/write-config.mjs && node --check functions/api/paychangu/_shared.js && node --check functions/api/paychangu/initiate.js && node --check functions/api/paychangu/callback.js && node --check functions/api/paychangu/verify.js"
+    "check": "node --check src/app.js && node --check src/data.js && node --check scripts/dev-server.mjs && node --check scripts/write-config.mjs"
   }
 }

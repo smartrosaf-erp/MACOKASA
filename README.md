@@ -30,7 +30,7 @@ Default local portal passwords:
 wrangler pages deploy public --project-name macokasa-kabaza-system
 ```
 
-The included GitHub Action can also deploy to Cloudflare Pages when these repository secrets exist: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `PUBLIC_BASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `PAYCHANGU_PUBLIC_KEY`, and the three portal password secrets.
+The included GitHub Action can also deploy to Cloudflare Pages when these repository secrets exist: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `PUBLIC_BASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and the three portal password secrets.
 
 ## Supabase
 
@@ -38,18 +38,15 @@ The included GitHub Action can also deploy to Cloudflare Pages when these reposi
 2. Run `supabase/schema.sql` in the SQL editor.
 3. Optionally run `supabase/seed.sql`.
 4. Add `SUPABASE_URL` and `SUPABASE_ANON_KEY` to Cloudflare Pages.
-5. Add `SUPABASE_SERVICE_ROLE_KEY` only to Cloudflare Pages function secrets, never to public client config.
-
-## PayChangu
-
-Add `PAYCHANGU_PUBLIC_KEY` for hosted checkout forms. Add `PAYCHANGU_SECRET_KEY` for the Cloudflare Pages Functions under `/api/paychangu/*`, which initiate and verify transactions server-side.
+5. Add `SUPABASE_SERVICE_ROLE_KEY` only to trusted server-side functions, never to public client config.
 
 ## Operations
 
 - Membership reminders run from the ERP Operations Control screen and record dispatch logs for Email, WhatsApp, and SMS channels.
 - Cash payments require collector name and remain unreconciled until marked deposited.
 - Replacement, upgrade, or downgrade card issuance invalidates the old QR token and queues a new card.
-- The card preview updates live when the operator name, membership class, district, area, sex, plate, or photo changes.
+- Donation and subscription screens support bank card, AirtelMoney, Mpamba, EFT, and cash recording with finance reconciliation.
+- The card preview updates live when the operator name, membership class, district, area, sex, or photo changes.
 
 ## Production Hardening
 
@@ -57,4 +54,4 @@ Add `PAYCHANGU_PUBLIC_KEY` for hosted checkout forms. Add `PAYCHANGU_SECRET_KEY`
 - Configure approved SMS, WhatsApp, and email providers before sending real messages.
 - Tighten Supabase RLS before entering private member data.
 - Store card print files and member photos in private storage with access controls.
-- Keep all service-role, PayChangu secret, and Cloudflare tokens out of Git.
+- Keep all service-role and Cloudflare tokens out of Git.

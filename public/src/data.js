@@ -83,7 +83,7 @@ export const membershipPlans = [
   }
 ];
 
-export const paymentMethods = ["AirtelMoney via PayChangu", "Mpamba via PayChangu", "Bank Card via PayChangu", "Bank Transfer", "Cash"];
+export const paymentMethods = ["AirtelMoney", "Mpamba", "Bank Card", "Bank Transfer", "Cash"];
 export const reminderDays = [28, 14, 7, 3, 2, 1];
 
 export const affiliatedMembers = ["ROSAF", "KATAMAS", "KAMA"];
@@ -248,7 +248,7 @@ export const demoState = {
       payerName: "Joseph Banda",
       payerType: "operator",
       membershipNumber: "MCK-LL-2026-0001",
-      method: "AirtelMoney via PayChangu",
+      method: "AirtelMoney",
       amount: 55000,
       purpose: "Gold annual subscription",
       collectorName: "",
@@ -341,6 +341,32 @@ export const demoState = {
       method: "Bank Transfer",
       purpose: "Helmet safety campaign",
       createdAt: "2026-05-18"
+    }
+  ],
+  financeEntries: [
+    {
+      id: "fin-003",
+      type: "expense",
+      category: "Training support",
+      source: "ROSAF safe riding course",
+      amount: 120000,
+      method: "Bank Transfer",
+      reference: "EXP-TRN-001",
+      recordedBy: "Finance Officer",
+      notes: "Operator refresher training support",
+      createdAt: "2026-06-05"
+    },
+    {
+      id: "fin-004",
+      type: "expense",
+      category: "Card printing",
+      source: "ID card production",
+      amount: 45000,
+      method: "Cash",
+      reference: "EXP-CARD-001",
+      recordedBy: "Printing Desk",
+      notes: "Initial PVC card batch",
+      createdAt: "2026-06-10"
     }
   ],
   reminderLogs: []
