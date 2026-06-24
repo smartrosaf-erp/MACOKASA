@@ -186,6 +186,10 @@ button {
   min-height: calc(100vh - 77px);
 }
 
+.layout.no-sidebar {
+  grid-template-columns: 1fr;
+}
+
 .sidebar {
   position: sticky;
   top: 77px;
@@ -230,6 +234,11 @@ button {
 
 .workspace {
   padding: 24px;
+}
+
+.layout.no-sidebar .workspace {
+  width: min(100%, 1680px);
+  margin: 0 auto;
 }
 
 .hero {

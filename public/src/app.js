@@ -14,8 +14,8 @@ let pendingRole = "";
 let state = loadState();
 
 const navItems = [
-  ["public", "Home", iconMotorcycle, ["public", "owner", "staff", "printing"]],
-  ["registration", "Public registration", iconRegistry, ["public", "owner", "staff"]],
+  ["public", "Home", iconMotorcycle, ["public"]],
+  ["registration", "Public registration", iconRegistry, ["public"]],
   ["staff", "Staff ERP dashboard", iconDashboard, ["staff"]],
   ["operators", "Operator database", iconRegistry, ["staff"]],
   ["membership", "Membership and reminders", iconBell, ["staff"]],
@@ -24,7 +24,7 @@ const navItems = [
   ["owners", "Owner portal", iconMotorcycle, ["owner", "staff"]],
   ["safety", "Licensing and safety", iconShield, ["staff"]],
   ["cooperatives", "Cooperative loans", iconCoop, ["staff"]],
-  ["analytics", "Impact analytics", iconChart, ["public", "staff"]],
+  ["analytics", "Impact analytics", iconChart, ["public"]],
   ["operations", "Operations control", iconCloud, ["staff"]]
 ];
 
@@ -108,9 +108,8 @@ function render() {
     activeSection = activeRole === "owner" ? "owners" : activeRole === "printing" ? "cards" : "public";
   }
   const roleUnlocked = unlockedRoles.has(activeRole);
-  const visibleNavItems = roleUnlocked
-    ? navItems.filter(([, , , roles]) => roles.includes(activeRole))
-    : navItems.filter(([, , , roles]) => roles.includes("public"));
+  const showSidebar = activeRole !== "public" && roleUnlocked;
+  const visibleNavItems = showSidebar ? navItems.filter(([, , , roles]) => roles.includes(activeRole)) : [];
   app.innerHTML = `
     <div class="app-shell">
       <header class="topbar">
@@ -140,17 +139,19 @@ function render() {
           ${activeRole !== "public" && roleUnlocked ? `<button class="quiet-btn" type="button" data-action="logout">Lock portal</button>` : ""}
         </div>
       </header>
-      <div class="layout">
-        <aside class="sidebar">
-          <nav class="nav-group" aria-label="MACOKASA modules">
-            ${visibleNavItems
-              .map(([key, label, icon]) => `
-                <button class="nav-button ${activeSection === key ? "active" : ""}" type="button" data-section="${key}">
-                  ${icon()} <span>${label}</span>
-                </button>
-              `).join("")}
-          </nav>
-        </aside>
+      <div class="layout ${showSidebar ? "" : "no-sidebar"}">
+        ${showSidebar ? `
+          <aside class="sidebar">
+            <nav class="nav-group" aria-label="MACOKASA modules">
+              ${visibleNavItems
+                .map(([key, label, icon]) => `
+                  <button class="nav-button ${activeSection === key ? "active" : ""}" type="button" data-section="${key}">
+                    ${icon()} <span>${label}</span>
+                  </button>
+                `).join("")}
+            </nav>
+          </aside>
+        ` : ""}
         <main class="workspace">${roleUnlocked ? renderActiveSection() : renderPortalLogin()}</main>
       </div>
       <div class="toast" role="status" aria-live="polite"></div>
@@ -444,7 +445,7 @@ function renderStaffDashboard() {
           <button class="quiet-btn" type="button" data-section="payments">Record payment</button>
           <button class="quiet-btn" type="button" data-section="cards">Issue card</button>
           <button class="quiet-btn" type="button" data-action="run-reminders">Run reminders</button>
-          <button class="quiet-btn" type="button" data-section="analytics">View analytics</button>
+          <button class="quiet-btn" type="button" data-section="operations">View reporting controls</button>
         </div>
       </div>
       <div class="panel span-12">
