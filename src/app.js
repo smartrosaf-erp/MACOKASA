@@ -1574,12 +1574,14 @@ function cardPreview(operator, card) {
               <strong>MACOKASA MEMBER ID</strong>
               <small>Kabaza verified membership</small>
             </div>
-            <span class="card-tier" data-card-plan-label>${escapeHtml(plan?.name || "Member")}</span>
+            <span class="malawi-flag card-flag" aria-label="Malawi flag"><span class="flag-sun" aria-hidden="true"></span></span>
           </div>
           <div class="id-card-body">
-            <div class="member-photo has-image" data-card-photo-preview style="background-image:url('./assets/member-photo-placeholder.png')">
-              <span class="member-initials">${initials(operator.fullName)}</span>
-              <span class="photo-flag" aria-label="Malawi flag"><span class="flag-sun" aria-hidden="true"></span></span>
+            <div class="member-photo-panel">
+              <div class="member-photo has-image" data-card-photo-preview style="background-image:url('./assets/member-photo-placeholder.png')">
+                <span class="member-initials">${initials(operator.fullName)}</span>
+              </div>
+              <span class="card-tier photo-tier" data-card-plan-label>${escapeHtml(plan?.name || "Member")}</span>
             </div>
             <div class="id-card-details">
               <h3 data-card-name>${escapeHtml(operator.fullName)}</h3>
