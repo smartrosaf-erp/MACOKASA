@@ -5,7 +5,7 @@ Administrator handoff for the MACOKASA public website, staff ERP, motorcycle own
 ## Local Test
 
 ```powershell
-cd "C:\Users\Mada\Documents\Codex\2026-06-20\remove-revenue-receipts-i-find-it\outputs\macokasa-kabaza-system"
+cd "C:\Users\Mada\OneDrive\Documents\GitHub\MACOKASA"
 node scripts/write-config.mjs
 node scripts/dev-server.mjs
 ```
@@ -18,27 +18,24 @@ Default local portal passwords:
 - Motorcycle owner portal: `Owner@2026`
 - Printing portal: `Print@2026`
 
-## Cloudflare Pages
+## Render Static Site
 
-1. Create a Cloudflare Pages project named `macokasa-kabaza-system`.
-2. Set build command to `node scripts/write-config.mjs`.
-3. Set output directory to `public`.
-4. Add the environment variables in `.env.example`.
-5. Deploy manually with:
+1. Push this folder to a GitHub repository named `MACOKASA`.
+2. In Render, create a new Static Site from that GitHub repository.
+3. Use branch `main`.
+4. Set build command to `npm run build`.
+5. Set publish directory to `public`.
+6. Add the environment variables in `.env.example`.
 
-```powershell
-wrangler pages deploy public --project-name macokasa-kabaza-system
-```
-
-The included GitHub Action can also deploy to Cloudflare Pages when these repository secrets exist: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `PUBLIC_BASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and the three portal password secrets.
+The included `render.yaml` also describes the Render static site settings.
 
 ## Supabase
 
 1. Create a Supabase project.
 2. Run `supabase/schema.sql` in the SQL editor.
 3. Optionally run `supabase/seed.sql`.
-4. Add `SUPABASE_URL` and `SUPABASE_ANON_KEY` to Cloudflare Pages.
-5. Add `SUPABASE_SERVICE_ROLE_KEY` only to trusted server-side functions, never to public client config.
+4. Add `SUPABASE_URL` and `SUPABASE_ANON_KEY` to Render.
+5. Do not add `SUPABASE_SERVICE_ROLE_KEY` to this Render static site.
 
 ## Operations
 
@@ -54,4 +51,4 @@ The included GitHub Action can also deploy to Cloudflare Pages when these reposi
 - Configure approved SMS, WhatsApp, and email providers before sending real messages.
 - Tighten Supabase RLS before entering private member data.
 - Store card print files and member photos in private storage with access controls.
-- Keep all service-role and Cloudflare tokens out of Git.
+- Keep all service-role tokens out of Git.
