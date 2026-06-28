@@ -379,6 +379,7 @@ export const demoState = {
       category: "Training",
       summary: "Operators practice controlled riding, cone navigation, helmet discipline, and road positioning during a stakeholder safety session.",
       body: "MACOKASA uses road safety activities to connect operators, trainers, police, owners, and local leadership around safer public transport. The story demonstrates how verified membership can become a pathway to responsible riding and public confidence.",
+      images: ["./assets/macokasa-road-safety-training.jpg", "./assets/macokasa-rider-training.jpg"],
       imageData: "./assets/macokasa-road-safety-training.jpg",
       status: "published",
       createdAt: "2026-06-20"
@@ -389,6 +390,7 @@ export const demoState = {
       category: "Stakeholder meeting",
       summary: "Training partners and public safety stakeholders engage riders on licensing, protective gear, passenger safety, and rank accountability.",
       body: "The MACOKASA IMS gives this work a practical home by linking registration, licence support, motorcycle ownership, complaints, card verification, and district-level reporting.",
+      images: ["./assets/macokasa-rider-training.jpg", "./assets/macokasa-road-safety-training.jpg"],
       imageData: "./assets/macokasa-rider-training.jpg",
       status: "published",
       createdAt: "2026-06-18"

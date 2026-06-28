@@ -3,6 +3,7 @@ import { affiliatedMembers, demoState, districts, membershipPlans, paymentMethod
 const config = window.MACOKASA_CONFIG || {};
 const app = document.querySelector("#app");
 const storageKey = "macokasa-kabaza-state-v2";
+const defaultStoryImage = "./assets/macokasa-road-safety-training.jpg";
 const collections = ["operators", "owners", "motorcycles", "payments", "cards", "cooperatives", "fundEntries", "donations", "financeEntries", "stories", "reminderLogs"];
 let activeSection = "public";
 let activeRole = "public";
@@ -14,6 +15,7 @@ let pendingRole = "";
 let ownerFundFilterId = "all";
 let donationChoice = { method: "card", amount: "50000" };
 let subscriptionChoice = { method: "airtel", amount: "15000" };
+let editingStoryId = "";
 let state = loadState();
 
 const navItems = [
@@ -391,8 +393,8 @@ function renderStoriesPage() {
     </section>
     <section class="public-section public-story-feature">
       <div class="feature-story">
-        <img src="${escapeAttr(featuredStory?.imageData || "./assets/macokasa-road-safety-training.jpg")}" alt="${escapeAttr(featuredStory?.title || "MACOKASA road safety training")}" />
-        <div>
+        ${storyGallery(featuredStory || {}, "feature")}
+        <div class="feature-story-copy">
           <span class="story-date">${compactDate(featuredStory?.createdAt || today())}</span>
           <h3>${escapeHtml(featuredStory?.title || "Kabaza road safety work")}</h3>
           <p>${escapeHtml(featuredStory?.summary || "MACOKASA is coordinating operators and stakeholders around safer public transport.")}</p>
@@ -610,8 +612,8 @@ function renderPublicWebsite() {
         <h2>Evidence of safer-rider work in motion</h2>
       </div>
       <div class="feature-story">
-        <img src="${escapeAttr(featuredStory?.imageData || "./assets/macokasa-road-safety-training.jpg")}" alt="${escapeAttr(featuredStory?.title || "MACOKASA road safety training")}" />
-        <div>
+        ${storyGallery(featuredStory || {}, "feature")}
+        <div class="feature-story-copy">
           <span class="story-date">${compactDate(featuredStory?.createdAt || today())}</span>
           <h3>${escapeHtml(featuredStory?.title || "Kabaza road safety work")}</h3>
           <p>${escapeHtml(featuredStory?.summary || "MACOKASA is coordinating operators and stakeholders around safer public motorcycle transport.")}</p>
@@ -1199,36 +1201,52 @@ function renderAnalytics() {
 
 function renderContentAdmin() {
   const latestStory = publishedStories()[0] || {};
+  const editingStory = state.stories.find((story) => story.id === editingStoryId);
+  const storyDraft = editingStory || {
+    title: "Road safety practice strengthens Kabaza verification",
+    category: "Training",
+    createdAt: today(),
+    status: "published",
+    summary: "MACOKASA and safety stakeholders are building a verified, safer Kabaza sector through training, membership, and digital card authentication.",
+    body: "The story can highlight field activity, district engagement, operator participation, owner benefits, stakeholder meetings, or safety outcomes. It will appear on the public website after saving.",
+    images: [defaultStoryImage]
+  };
+  const draftImages = storyImages(storyDraft);
   return `
     <section class="grid">
       <div class="panel span-7">
         <div class="panel-header">
-          <div><p class="eyebrow">Webpage admin</p><h2>Post public story with visual</h2></div>
-          <span class="status green">Preview enabled</span>
+          <div><p class="eyebrow">Webpage admin</p><h2>${editingStory ? "Edit public story" : "Post public story with visuals"}</h2></div>
+          <span class="status ${editingStory ? "amber" : "green"}">${editingStory ? "Editing story" : "Preview enabled"}</span>
         </div>
         <form class="form-grid" data-form="story" data-story-composer>
-          <label class="field"><span>Story title</span><input class="input-control" name="title" data-story-field="title" required value="Road safety practice strengthens Kabaza verification" /></label>
-          <label class="field"><span>Category</span>${select("category", ["Training", "Stakeholder meeting", "Owner impact", "Safety campaign", "District registration"], "Training")}</label>
-          <label class="field"><span>Publication date</span><input class="input-control" type="date" name="createdAt" data-story-field="createdAt" value="${today()}" /></label>
-          <label class="field"><span>Status</span>${select("status", ["published", "draft"], "published")}</label>
-          <label class="field full"><span>Summary</span><textarea class="textarea-control" name="summary" data-story-field="summary" required>MACOKASA and safety stakeholders are building a verified, safer Kabaza sector through training, membership, and digital card authentication.</textarea></label>
-          <label class="field full"><span>Full story</span><textarea class="textarea-control" name="body" data-story-field="body">The story can highlight field activity, district engagement, operator participation, owner benefits, stakeholder meetings, or safety outcomes. It will appear on the public website after saving.</textarea></label>
-          <label class="field full"><span>Attach visual</span><input class="input-control" type="file" accept="image/*" data-story-image /></label>
-          <input type="hidden" name="imageData" data-story-image-data value="./assets/macokasa-road-safety-training.jpg" />
-          <button class="primary-btn" type="submit">Publish story</button>
+          <input type="hidden" name="storyId" value="${escapeAttr(editingStory?.id || "")}" />
+          <label class="field"><span>Story title</span><input class="input-control" name="title" data-story-field="title" required value="${escapeAttr(storyDraft.title)}" /></label>
+          <label class="field"><span>Category</span>${select("category", ["Training", "Stakeholder meeting", "Owner impact", "Safety campaign", "District registration"], storyDraft.category || "Training")}</label>
+          <label class="field"><span>Publication date</span><input class="input-control" type="date" name="createdAt" data-story-field="createdAt" value="${escapeAttr(storyDraft.createdAt || today())}" /></label>
+          <label class="field"><span>Status</span>${select("status", ["published", "draft"], storyDraft.status || "published")}</label>
+          <label class="field full"><span>Summary</span><textarea class="textarea-control" name="summary" data-story-field="summary" required>${escapeHtml(storyDraft.summary || "")}</textarea></label>
+          <label class="field full"><span>Full story</span><textarea class="textarea-control" name="body" data-story-field="body">${escapeHtml(storyDraft.body || "")}</textarea></label>
+          <label class="field full"><span>Attach visuals</span><input class="input-control" type="file" accept="image/*" multiple data-story-image /><small class="microcopy">Select more than one photo to publish a story gallery. When editing, choosing files replaces the current story photos.</small></label>
+          <input type="hidden" name="images" data-story-images value="${escapeAttr(JSON.stringify(draftImages))}" />
+          <input type="hidden" name="imageData" data-story-primary-image value="${escapeAttr(draftImages[0] || defaultStoryImage)}" />
+          <div class="form-actions full">
+            <button class="primary-btn" type="submit">${editingStory ? "Update story" : "Publish story"}</button>
+            ${editingStory ? `<button class="quiet-btn" type="button" data-action="cancel-story-edit">Cancel edit</button>` : ""}
+          </div>
         </form>
       </div>
       <div class="panel span-5">
         <div class="panel-header">
           <div><p class="eyebrow">Public preview</p><h2>Story card preview</h2></div>
-          <span class="status">Website</span>
+          <span class="status">${draftImages.length} photo${draftImages.length === 1 ? "" : "s"}</span>
         </div>
         <article class="admin-story-preview" data-story-preview>
-          <img data-story-preview-image src="./assets/macokasa-road-safety-training.jpg" alt="Story preview" />
+          <div class="story-preview-gallery" data-story-preview-gallery>${storyGallery(storyDraft, "admin")}</div>
           <div>
-            <span data-story-preview-meta>Training - ${compactDate(today())}</span>
-            <h3 data-story-preview-title>Road safety practice strengthens Kabaza verification</h3>
-            <p data-story-preview-summary>MACOKASA and safety stakeholders are building a verified, safer Kabaza sector through training, membership, and digital card authentication.</p>
+            <span data-story-preview-meta>${escapeHtml(storyDraft.category || "Impact")} - ${compactDate(storyDraft.createdAt || today())}</span>
+            <h3 data-story-preview-title>${escapeHtml(storyDraft.title || "Story title")}</h3>
+            <p data-story-preview-summary>${escapeHtml(storyDraft.summary || "Story summary will appear here.")}</p>
           </div>
         </article>
         <div class="record-card story-admin-note">
@@ -1341,6 +1359,19 @@ function handleClick(event) {
     showToast("Cash payment marked as deposited.");
     return;
   }
+  const editStory = event.target.closest("[data-edit-story]");
+  if (editStory) {
+    const story = state.stories.find((item) => item.id === editStory.dataset.editStory);
+    if (!story) {
+      showToast("Story was not found.");
+      return;
+    }
+    editingStoryId = story.id;
+    activeSection = "content";
+    render();
+    showToast("Story loaded for editing.");
+    return;
+  }
   const deleteStory = event.target.closest("[data-delete-story]");
   if (deleteStory) {
     const story = state.stories.find((item) => item.id === deleteStory.dataset.deleteStory);
@@ -1349,8 +1380,15 @@ function handleClick(event) {
       return;
     }
     if (!window.confirm(`Delete "${story.title}" from the public website?`)) return;
+    if (editingStoryId === story.id) editingStoryId = "";
     void deleteRecord("stories", story.id);
     showToast("Story deleted from the website.");
+    return;
+  }
+  if (action === "cancel-story-edit") {
+    editingStoryId = "";
+    render();
+    showToast("Story editing cancelled.");
     return;
   }
   if (action === "logout") {
@@ -1386,16 +1424,16 @@ function handleChange(event) {
     reader.readAsDataURL(file);
   }
   if (event.target.matches("[data-story-image]")) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const form = event.target.closest("[data-story-composer]");
-      const hidden = form?.querySelector("[data-story-image-data]");
-      if (hidden) hidden.value = reader.result;
+    const files = [...(event.target.files || [])];
+    if (!files.length) return;
+    const form = event.target.closest("[data-story-composer]");
+    Promise.all(files.map(readImageFile)).then((images) => {
+      const hidden = form?.querySelector("[data-story-images]");
+      const primary = form?.querySelector("[data-story-primary-image]");
+      if (hidden) hidden.value = JSON.stringify(images);
+      if (primary) primary.value = images[0] || defaultStoryImage;
       updateStoryPreview(form);
-    };
-    reader.readAsDataURL(file);
+    });
     return;
   }
   if (event.target.matches("[data-owner-bike-filter]")) {
@@ -1647,16 +1685,31 @@ async function submitCooperative(values) {
 }
 
 async function submitStory(values) {
-  await addRecord("stories", {
-    id: newId("story"),
+  const images = storyImages(values.images);
+  const storyRecord = {
     title: values.title,
     category: values.category,
     summary: values.summary,
     body: values.body,
-    imageData: values.imageData || "./assets/macokasa-road-safety-training.jpg",
+    images,
+    imageData: images[0] || defaultStoryImage,
     status: values.status || "published",
-    createdAt: values.createdAt || today()
+    createdAt: values.createdAt || today(),
+    updatedAt: new Date().toISOString()
+  };
+  if (values.storyId && state.stories.some((story) => story.id === values.storyId)) {
+    const storyId = values.storyId;
+    editingStoryId = "";
+    activeSection = "content";
+    await updateRecord("stories", storyId, storyRecord);
+    showToast(values.status === "draft" ? "Draft story updated." : "Published story updated.");
+    return;
+  }
+  await addRecord("stories", {
+    id: newId("story"),
+    ...storyRecord
   });
+  editingStoryId = "";
   activeSection = "content";
   showToast(values.status === "draft" ? "Story saved as draft." : "Story published to the website.");
 }
@@ -1740,6 +1793,56 @@ function publishedStories() {
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 }
 
+function storyImages(source) {
+  let images = [];
+  if (Array.isArray(source)) {
+    images = source;
+  } else if (typeof source === "string") {
+    try {
+      const parsed = JSON.parse(source);
+      images = Array.isArray(parsed) ? parsed : [source];
+    } catch {
+      images = source ? [source] : [];
+    }
+  } else if (source) {
+    images = Array.isArray(source.images) ? source.images : [];
+    if (!images.length && source.imageData) images = [source.imageData];
+  }
+  const cleaned = images.map((item) => String(item || "").trim()).filter(Boolean);
+  return cleaned.length ? cleaned : [defaultStoryImage];
+}
+
+function storyPrimaryImage(story) {
+  return storyImages(story)[0] || defaultStoryImage;
+}
+
+function storyGallery(story, variant = "feature") {
+  const images = storyImages(story);
+  const title = story?.title || "MACOKASA story";
+  const extraCount = Math.max(0, images.length - 4);
+  return `
+    <div class="story-gallery story-gallery-${escapeAttr(variant)}">
+      <img class="story-gallery-main" src="${escapeAttr(images[0] || defaultStoryImage)}" alt="${escapeAttr(title)}" />
+      ${images.length > 1 ? `
+        <div class="story-gallery-strip">
+          ${images.slice(1, 4).map((image, index) => `<img src="${escapeAttr(image)}" alt="${escapeAttr(`${title} photo ${index + 2}`)}" />`).join("")}
+          ${extraCount ? `<span class="story-photo-count">+${extraCount}</span>` : ""}
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function storyCardMedia(story) {
+  const images = storyImages(story);
+  return `
+    <div class="story-card-media">
+      <img src="${escapeAttr(storyPrimaryImage(story))}" alt="${escapeAttr(story?.title || "MACOKASA story")}" />
+      ${images.length > 1 ? `<span class="story-photo-badge">${images.length} photos</span>` : ""}
+    </div>
+  `;
+}
+
 function storyCards(rows) {
   rows = [...rows];
   const fallbackStories = [
@@ -1768,8 +1871,8 @@ function storyCards(rows) {
   while (rows.length < 3) rows.push(fallbackStories[rows.length % fallbackStories.length]);
   return rows.map((story) => `
     <article class="public-story-card">
-      <img src="${escapeAttr(story.imageData || "./assets/macokasa-road-safety-training.jpg")}" alt="${escapeAttr(story.title || "MACOKASA story")}" />
-      <div>
+      ${storyCardMedia(story)}
+      <div class="public-story-card-body">
         <span>${escapeHtml(story.category || "Impact")} - ${compactDate(story.createdAt || today())}</span>
         <h3>${escapeHtml(story.title || "MACOKASA story")}</h3>
         <p>${escapeHtml(story.summary || "")}</p>
@@ -2034,15 +2137,16 @@ function cooperativeTable(rows) {
 
 function storyTable(rows) {
   if (!rows?.length) return `<div class="empty-state">No website stories have been created yet.</div>`;
-  return table(["Date", "Title", "Category", "Status", "Preview summary", "Actions"], [...rows]
+  return table(["Date", "Title", "Photos", "Category", "Status", "Preview summary", "Actions"], [...rows]
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .map((story) => [
       compactDate(story.createdAt),
       `<strong>${escapeHtml(story.title)}</strong>`,
+      `${storyImages(story).length}`,
       escapeHtml(story.category || "Impact"),
       statusPill(story.status || "published", story.status === "draft" ? "amber" : "green"),
       escapeHtml(story.summary || ""),
-      `<button class="danger-btn small-btn" type="button" data-delete-story="${escapeAttr(story.id)}">Delete</button>`
+      `<div class="table-actions"><button class="quiet-btn small-btn" type="button" data-edit-story="${escapeAttr(story.id)}">Edit</button><button class="danger-btn small-btn" type="button" data-delete-story="${escapeAttr(story.id)}">Delete</button></div>`
     ]));
 }
 
@@ -2195,15 +2299,28 @@ function updateCardPreviewFromForm() {
 function updateStoryPreview(form) {
   if (!form) return;
   const values = formValues(form);
-  const image = form.querySelector("[data-story-image-data]")?.value || "./assets/macokasa-road-safety-training.jpg";
-  const imageTarget = document.querySelector("[data-story-preview-image]");
+  const images = storyImages(form.querySelector("[data-story-images]")?.value);
+  const primary = form.querySelector("[data-story-primary-image]");
+  if (primary) primary.value = images[0] || defaultStoryImage;
+  const galleryTarget = document.querySelector("[data-story-preview-gallery]");
   const metaTarget = document.querySelector("[data-story-preview-meta]");
   const titleTarget = document.querySelector("[data-story-preview-title]");
   const summaryTarget = document.querySelector("[data-story-preview-summary]");
-  if (imageTarget) imageTarget.src = image;
+  const countTarget = document.querySelector("[data-story-preview]")?.closest(".panel")?.querySelector(".panel-header .status");
+  if (galleryTarget) galleryTarget.innerHTML = storyGallery({ ...values, images }, "admin");
+  if (countTarget) countTarget.textContent = `${images.length} photo${images.length === 1 ? "" : "s"}`;
   if (metaTarget) metaTarget.textContent = `${values.category || "Impact"} - ${compactDate(values.createdAt || today())}`;
   if (titleTarget) titleTarget.textContent = values.title || "Story title";
   if (summaryTarget) summaryTarget.textContent = values.summary || "Story summary will appear here.";
+}
+
+function readImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 function setText(selector, value) {

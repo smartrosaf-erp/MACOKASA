@@ -30,6 +30,7 @@ insert into public.macokasa_records (collection, payload) values
   "category": "Training",
   "summary": "MACOKASA and safety stakeholders are building a verified, safer Kabaza sector through training, membership, and digital card authentication.",
   "body": "This seeded story appears on the public website and can be replaced by webpage admin posts with uploaded visuals.",
+  "images": ["./assets/macokasa-road-safety-training.jpg", "./assets/macokasa-rider-training.jpg"],
   "imageData": "./assets/macokasa-road-safety-training.jpg",
   "status": "published",
   "createdAt": "2026-06-24"
