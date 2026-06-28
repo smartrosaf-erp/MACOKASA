@@ -6,6 +6,7 @@ window.MACOKASA_CONFIG = {
   "portalPasswords": {
     "staff": "Macokasa@2026",
     "owner": "Owner@2026",
-    "printing": "Print@2026"
+    "printing": "Print@2026",
+    "webadmin": "WebAdmin@2026"
   }
 };

@@ -6,6 +6,7 @@ insert into public.macokasa_records (collection, payload) values
   "phone": "+265 999 000 001",
   "email": "seed.operator@example.com",
   "nationalId": "MW-SEED-001",
+  "operatorCategory": "Motorcycle operator",
   "district": "Lilongwe",
   "sex": "Male",
   "operatingArea": "Lilongwe Review Rank",

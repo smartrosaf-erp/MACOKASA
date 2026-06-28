@@ -9,7 +9,8 @@ const config = {
   portalPasswords: {
     staff: process.env.MACOKASA_STAFF_PASSWORD || "Macokasa@2026",
     owner: process.env.MACOKASA_OWNER_PASSWORD || "Owner@2026",
-    printing: process.env.MACOKASA_PRINT_PASSWORD || "Print@2026"
+    printing: process.env.MACOKASA_PRINT_PASSWORD || "Print@2026",
+    webadmin: process.env.MACOKASA_WEBADMIN_PASSWORD || "WebAdmin@2026"
   }
 };
 

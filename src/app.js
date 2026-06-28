@@ -18,7 +18,13 @@ let state = loadState();
 
 const navItems = [
   ["public", "Home", iconHome, ["public"]],
+  ["catalogue", "Services", iconDashboard, ["public"]],
+  ["stories", "Stories", iconStory, ["public"]],
+  ["about", "About MACOKASA", iconCoop, ["public"]],
   ["registration", "Public registration", iconRegistry, ["public"]],
+  ["donate", "Donate", iconPayment, ["public"]],
+  ["portal", "Portal access", iconShield, ["public"]],
+  ["partner", "Partner access", iconCoop, ["public"]],
   ["staff", "Staff ERP dashboard", iconDashboard, ["staff"]],
   ["operators", "Operator database", iconRegistry, ["staff"]],
   ["membership", "Membership and reminders", iconBell, ["staff"]],
@@ -28,7 +34,7 @@ const navItems = [
   ["safety", "Licensing and safety", iconShield, ["staff"]],
   ["cooperatives", "Cooperative loans", iconCoop, ["staff"]],
   ["analytics", "Impact analytics", iconChart, ["public"]],
-  ["content", "Website content", iconStory, ["staff"]],
+  ["content", "Website content", iconStory, ["staff", "webadmin"]],
   ["operations", "Operations control", iconCloud, ["staff"]]
 ];
 
@@ -126,7 +132,7 @@ async function updateRecord(collection, id, updates) {
 
 function render() {
   if (!navItems.some(([key, , , roles]) => key === activeSection && roles.includes(activeRole))) {
-    activeSection = activeRole === "owner" ? "owners" : activeRole === "printing" ? "cards" : "public";
+    activeSection = activeRole === "owner" ? "owners" : activeRole === "printing" ? "cards" : activeRole === "webadmin" ? "content" : "public";
   }
   const roleUnlocked = unlockedRoles.has(activeRole);
   const showSidebar = activeRole !== "public" && roleUnlocked;
@@ -138,26 +144,24 @@ function render() {
           <img src="./assets/macokasa-logo.png" alt="MACOKASA logo" />
           <div class="brand-title">
             <strong>MACOKASA</strong>
-            <span>Kabaza Operator and Stakeholder Information Management System</span>
+            <span>Malawi Coalition for Kabaza Stakeholders Association</span>
           </div>
         </div>
         ${activeRole === "public" ? `
           <nav class="site-nav" aria-label="Website navigation">
-            <button type="button" data-jump="catalogue">Catalogue</button>
-            <button type="button" data-jump="stories">Stories</button>
-            <button type="button" data-jump="about">About us</button>
-            <button type="button" data-section="registration">Public registration</button>
-            <button type="button" data-section="analytics">Impact analytics</button>
+            <button type="button" data-section="public">Home</button>
+            <button type="button" data-section="catalogue">Services</button>
+            <button type="button" data-section="stories">Stories</button>
+            <button type="button" data-section="about">About us</button>
+            <button type="button" data-section="registration">Registration</button>
+            <button type="button" data-section="analytics">Impact</button>
           </nav>
         ` : ""}
         <div class="top-actions">
-          <select class="role-switcher" data-role-switcher aria-label="Current portal role">
-            ${roleOption("public", "Public visitor")}
-            ${roleOption("owner", "Motorcycle owner")}
-            ${roleOption("staff", "MACOKASA staff")}
-            ${roleOption("printing", "Printing authority")}
-          </select>
-          ${activeRole === "public" ? `<button class="secondary-btn" type="button" data-section="registration">Join MACOKASA</button>` : ""}
+          ${activeRole === "public" ? `
+            <button class="donate-header-btn" type="button" data-section="donate">Donate</button>
+            <button class="portal-header-btn" type="button" data-section="portal">Staff / Partner</button>
+          ` : `<button class="quiet-btn" type="button" data-role="public">Website</button>`}
           ${activeRole !== "public" && roleUnlocked ? `<button class="quiet-btn" type="button" data-action="logout">Lock portal</button>` : ""}
         </div>
       </header>
@@ -191,8 +195,14 @@ function roleOption(value, label) {
 
 function renderActiveSection() {
   const sections = {
-    public: renderPublicWebsite,
+    public: renderHomePage,
+    catalogue: renderCataloguePage,
+    stories: renderStoriesPage,
+    about: renderAboutPage,
     registration: renderRegistration,
+    donate: renderDonatePage,
+    portal: renderPortalChooser,
+    partner: renderPartnerChooser,
     staff: renderStaffDashboard,
     operators: renderOperators,
     membership: renderMembership,
@@ -205,7 +215,7 @@ function renderActiveSection() {
     content: renderContentAdmin,
     operations: renderOperations
   };
-  return (sections[activeSection] || renderPublicWebsite)();
+  return (sections[activeSection] || renderHomePage)();
 }
 
 function renderPortalLogin() {
@@ -228,7 +238,7 @@ function renderPortalLogin() {
       <div class="panel span-5">
         <h2>MACOKASA digital membership platform</h2>
         <div class="split-list">
-          <div class="record-card"><strong>Members</strong><span>Register, renew, verify cards, and access safer-rider benefits.</span></div>
+          <div class="record-card"><strong>Operators</strong><span>Pedal and motorcycle operators register, renew, verify cards, and access safer-rider benefits.</span></div>
           <div class="record-card"><strong>Owners</strong><span>Track motorcycles, agreements, income, expenses, and assigned operators.</span></div>
           <div class="record-card"><strong>Staff</strong><span>Manage subscriptions, payments, cards, safety compliance, cooperatives, and reporting.</span></div>
         </div>
@@ -268,6 +278,263 @@ function verificationPanelFromQuery() {
         <div><span>Card number</span><strong>${escapeHtml(result.card.cardNumber || "")}</strong></div>
       </div>
       ${result.card.replacedBy ? `<p class="footer-note">This card was replaced by ${escapeHtml(result.card.replacedBy)} and should not be accepted as active.</p>` : ""}
+    </section>
+  `;
+}
+
+function renderHomePage() {
+  const impact = state.impact;
+  const verification = verificationPanelFromQuery();
+  return `
+    ${verification}
+    <section class="public-hero" aria-label="MACOKASA public website">
+      <div class="public-hero-media" role="img" aria-label="Pedal and motorcycle operator road safety training with stakeholders"></div>
+      <div class="public-hero-content">
+        <p class="hero-kicker">Malawi Coalition for Kabaza Stakeholders Association</p>
+        <h1>Formalizing pedal and motorcycle operators for safer community mobility.</h1>
+        <p>
+          MACOKASA coordinates bicycle and motorcycle operators, owners, rank leadership, safety partners, and public institutions
+          through verified registration, digital card authentication, licensing support, and district-level impact reporting.
+        </p>
+        <div class="hero-actions">
+          <button class="primary-btn" type="button" data-section="registration">Register an operator</button>
+          <button class="quiet-btn" type="button" data-section="analytics">View impact</button>
+        </div>
+        <div class="hero-proof">
+          <article><strong>${compactNumber(impact.estimatedFleet)}</strong><span>estimated transport livelihood fleet</span></article>
+          <article><strong>${compactNumber(impact.registeredOperators)}</strong><span>verified operator records</span></article>
+          <article><strong>1234XY</strong><span>toll-free safety line</span></article>
+        </div>
+      </div>
+    </section>
+    <section class="public-section home-theme-section">
+      <div class="section-heading">
+        <p class="eyebrow">Thematic areas</p>
+        <h2>Choose what you want to do</h2>
+      </div>
+      <div class="home-theme-grid">
+        ${themeCard("Register operators", "Capture bicycle and motorcycle operators, sex, district, rank, membership, licence, helmet, and ID-card details.", "Public registration", "registration", iconRegistry())}
+        ${themeCard("Coordinate services", "Membership classes, card verification, owner mapping, ROSAF training support, and stakeholder coordination.", "View services", "catalogue", iconDashboard())}
+        ${themeCard("Show impact", "Track formalization progress, safety gaps, female participation, district reach, and public confidence.", "Impact analytics", "analytics", iconChart())}
+      </div>
+    </section>
+  `;
+}
+
+function renderCataloguePage() {
+  return `
+    <section class="public-page-header services-header">
+      <p class="eyebrow">Services</p>
+      <h1>MACOKASA services for pedal and motorcycle operator formalization</h1>
+      <p>Each service area supports registration, safer transport, accountable ownership, and stakeholder coordination without duplicating public content.</p>
+    </section>
+    <section class="public-section public-programs">
+      <div class="program-grid">
+        <article>
+          <span>${iconRegistry()}</span>
+          <h3>Operator membership</h3>
+          <p>Regular, Silver, Gold, and Platinum annual memberships for bicycle and motorcycle operators with reminders and QR verification.</p>
+        </article>
+        <article>
+          <span>${iconMotorcycle()}</span>
+          <h3>Owner subscription</h3>
+          <p>Motorcycle owners subscribe, map motorcycles, find verified operators, and manage agreements from the owner portal.</p>
+        </article>
+        <article>
+          <span>${iconShield()}</span>
+          <h3>Safety and licensing</h3>
+          <p>ROSAF-linked licence facilitation, refresher training support, helmet records, plates, and safer-rank promotion.</p>
+        </article>
+        <article>
+          <span>${iconCard()}</span>
+          <h3>Card verification</h3>
+          <p>QR cards can be scanned by police, passengers, rank chairs, owners, and MACOKASA staff to check live status.</p>
+        </article>
+      </div>
+    </section>
+    <section class="grid">
+      <div class="panel span-7">
+        <div class="panel-header"><div><p class="eyebrow">Membership catalogue</p><h2>Operator membership classes</h2></div></div>
+        <div class="plan-grid">${membershipPlans.filter((plan) => plan.audience === "Operator").map(planCard).join("")}</div>
+      </div>
+      <div class="panel span-5">
+        <h2>Service partners</h2>
+        <div class="split-list">
+          <div class="record-card"><strong>ROSAF training pathway</strong><span>Members without licence records can be routed to reduced-fee licence facilitation and refresher safe-riding courses.</span></div>
+          <div class="record-card"><strong>Printing authority</strong><span>Membership card changes, replacements, upgrades, and downgrades are queued for controlled printing.</span></div>
+          <div class="record-card"><strong>Stakeholder reporting</strong><span>District, participation, safety, and registration summaries support public institutions and donor reporting.</span></div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderStoriesPage() {
+  const stories = publishedStories();
+  const featuredStory = stories[0];
+  return `
+    <section class="public-page-header stories-header">
+      <p class="eyebrow">Stories and field updates</p>
+      <h1>What MACOKASA work looks like on the ground</h1>
+      <p>Public stories focus on safety training, rank organization, stakeholder meetings, owner confidence, and operator formalization.</p>
+    </section>
+    <section class="public-section public-story-feature">
+      <div class="feature-story">
+        <img src="${escapeAttr(featuredStory?.imageData || "./assets/macokasa-road-safety-training.jpg")}" alt="${escapeAttr(featuredStory?.title || "MACOKASA road safety training")}" />
+        <div>
+          <span class="story-date">${compactDate(featuredStory?.createdAt || today())}</span>
+          <h3>${escapeHtml(featuredStory?.title || "Kabaza road safety work")}</h3>
+          <p>${escapeHtml(featuredStory?.summary || "MACOKASA is coordinating operators and stakeholders around safer public transport.")}</p>
+        </div>
+      </div>
+      <div class="story-card-grid">${storyCards(stories.slice(1, 4))}</div>
+    </section>
+    <section class="grid">
+      <div class="panel span-8">
+        <div class="panel-header">
+          <div><p class="eyebrow">Stakeholder meetings</p><h2>Government and public safety coordination</h2></div>
+          <span class="status">National engagement</span>
+        </div>
+        <div class="event-ticker">
+          <div class="event-track">
+            <span>DRTSS licence compliance clinic - Lilongwe</span>
+            <span>Police card verification briefing - Blantyre</span>
+            <span>Local government rank mapping - Mzuzu</span>
+            <span>Ministry of Transport formalization dialogue - Salima</span>
+            <span>ROSAF safe riding refresher intake - Zomba</span>
+          </div>
+        </div>
+        <div class="meeting-grid">
+          <div class="record-card"><strong>DRTSS road safety sessions</strong><span>Licence compliance, operator registration, roadworthiness, and safer-rank promotion.</span></div>
+          <div class="record-card"><strong>Malawi Police Service engagement</strong><span>Card verification, complaint tracking, passenger security, and enforcement support at ranks.</span></div>
+          <div class="record-card"><strong>Local government meetings</strong><span>District-level mapping, rank organization, motorcycle owner participation, and public awareness campaigns.</span></div>
+          <div class="record-card"><strong>Ministry of Transport dialogue</strong><span>National formalization, training pathways, stakeholder accountability, and sector data reporting.</span></div>
+        </div>
+      </div>
+      <div class="panel span-4">
+        <h2>Web admin posting</h2>
+        <p class="footer-note">Authorized WebAdmin partners can publish stories with visuals from the Staff / Partner portal.</p>
+        <button class="secondary-btn" type="button" data-section="portal">Open portal access</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderAboutPage() {
+  return `
+    <section class="public-page-header about-header">
+      <p class="eyebrow">About MACOKASA</p>
+      <h1>National coordination for bicycle and motorcycle operator accountability</h1>
+      <p>MACOKASA brings operators, owners, cooperatives, affiliates, and public institutions into one formalization and safety coordination framework.</p>
+    </section>
+    <section class="grid">
+      <div class="panel span-7">
+        <div class="split-list">
+          <div class="record-card"><strong>Livelihoods and formal work</strong><span>Pedal and motorcycle transport supports youth employment and small-scale ownership, but needs verified membership and safer operating standards.</span></div>
+          <div class="record-card"><strong>Safety and public health</strong><span>The portal tracks helmets, licence status, training history, plates, complaints, and card verification so safer operators can be promoted at ranks.</span></div>
+          <div class="record-card"><strong>Stakeholder coordination</strong><span>MACOKASA works with affiliated members and public stakeholders to improve safety, training, registration, licensing, and operator accountability.</span></div>
+        </div>
+      </div>
+      <div class="panel span-5">
+        <h2>Affiliated members</h2>
+        <div class="chip-grid">${affiliatedMembers.map((name) => name === "ROSAF" ? `<a class="brand-chip" href="https://www.rosaf.org" target="_blank" rel="noreferrer">${escapeHtml(name)}</a>` : `<span class="brand-chip">${escapeHtml(name)}</span>`).join("")}</div>
+        <h2 style="margin-top:18px">Stakeholders</h2>
+        <div class="chip-grid">${stakeholders.map((name) => `<span class="brand-chip outline">${escapeHtml(name)}</span>`).join("")}</div>
+      </div>
+      <div class="panel span-12">
+        <div class="panel-header"><div><p class="eyebrow">Sector evidence</p><h2>Why formalization matters now</h2></div></div>
+        <div class="source-list evidence-grid">
+          ${publicSources.map((source) => `
+            <div class="source-item">
+              <a href="${source.url}" target="_blank" rel="noreferrer">${escapeHtml(source.publisher)}</a>
+              <p>${escapeHtml(source.fact)}</p>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+      <div class="issue-strip span-12">
+        <strong>Report an issue</strong>
+        <span>Toll free line: 1234XY</span>
+        <span>Use it for unsafe riding, fake cards, overloading, harassment, or rank security incidents.</span>
+      </div>
+    </section>
+  `;
+}
+
+function renderDonatePage() {
+  return `
+    <section class="public-page-header donation-header">
+      <p class="eyebrow">Donate</p>
+      <h1>Support safer pedal and motorcycle operator formalization</h1>
+      <p>Donations support public safety campaigns, helmets, training engagement, district outreach, and verified membership awareness.</p>
+    </section>
+    <section class="grid">
+      <div class="panel span-7">
+        <div class="panel-header"><div><p class="eyebrow">Donation window</p><h2>Choose how to give</h2></div><span class="status green">Safety work</span></div>
+        ${paymentExperience("donation", donationChoice, {
+          title: "Donation details",
+          nameLabel: "Donor name",
+          defaultName: "Road safety supporter",
+          purpose: "Helmet safety campaign"
+        })}
+      </div>
+      <div class="panel span-5">
+        <h2>What donations help fund</h2>
+        <div class="split-list">
+          <div class="record-card"><strong>Safety campaigns</strong><span>Community messaging on helmets, passenger limits, reflectors, and responsible operation.</span></div>
+          <div class="record-card"><strong>Training support</strong><span>Reduced barriers for operators to access ROSAF-linked safe-riding and licensing pathways.</span></div>
+          <div class="record-card"><strong>Verification access</strong><span>Public QR card awareness so passengers, police, rank chairs, and owners can authenticate operators.</span></div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderPortalChooser() {
+  return `
+    <section class="public-page-header portal-header">
+      <p class="eyebrow">Secure access</p>
+      <h1>Staff and partner portal</h1>
+      <p>Select the type of access you need. Each portal opens its own password window.</p>
+    </section>
+    <section class="portal-choice-grid">
+      <button class="portal-choice-card" type="button" data-role="staff">
+        <span>${iconDashboard()}</span>
+        <strong>MACOKASA staff</strong>
+        <small>Full ERP access for finance, membership, safety, cards, cooperatives, and reports.</small>
+      </button>
+      <button class="portal-choice-card" type="button" data-section="partner">
+        <span>${iconCoop()}</span>
+        <strong>Partner portal</strong>
+        <small>Printing authority, motorcycle owners, and WebAdmin access.</small>
+      </button>
+    </section>
+  `;
+}
+
+function renderPartnerChooser() {
+  return `
+    <section class="public-page-header portal-header">
+      <p class="eyebrow">Partner access</p>
+      <h1>Choose your partner portal</h1>
+      <p>Partners use separate access windows based on their operational role.</p>
+    </section>
+    <section class="portal-choice-grid three">
+      <button class="portal-choice-card" type="button" data-role="printing">
+        <span>${iconCard()}</span>
+        <strong>Printing authority</strong>
+        <small>Card preview, QR verification, and print queue control.</small>
+      </button>
+      <button class="portal-choice-card" type="button" data-role="owner">
+        <span>${iconMotorcycle()}</span>
+        <strong>Motorcycle owners</strong>
+        <small>Motorcycle mapping, operator assignment, agreement, income, and expense tracking.</small>
+      </button>
+      <button class="portal-choice-card" type="button" data-role="webadmin">
+        <span>${iconStory()}</span>
+        <strong>WebAdmin</strong>
+        <small>Post public stories with visuals and preview website content.</small>
+      </button>
     </section>
   `;
 }
@@ -456,26 +723,17 @@ function renderPublicWebsite() {
 
 function renderRegistration() {
   return `
+    <section class="public-page-header registration-header">
+      <p class="eyebrow">Public registration</p>
+      <h1>Register a bicycle or motorcycle operator</h1>
+      <p>Capture the operator's membership, sex, district, rank, safety, licence, and identification details for MACOKASA verification.</p>
+    </section>
     <section class="grid">
-      <div class="login-panel span-12">
-        <div class="form-header">
-          <div>
-            <p class="eyebrow">Membership access</p>
-            <h2>Member, owner, and staff entry points</h2>
-          </div>
-          <span class="status">${activeRoleLabel()}</span>
-        </div>
-        <div class="login-grid">
-          <div class="login-card"><strong>Public member</strong><p class="footer-note">Operators register, choose Regular/Silver/Gold/Platinum, pay, and receive card status updates.</p><button class="quiet-btn" type="button" data-role="public">Use public view</button></div>
-          <div class="login-card"><strong>Motorcycle owner</strong><p class="footer-note">Owners map motorcycles, agreements, operator income, expenses, and complaints feedback.</p><button class="quiet-btn" type="button" data-role="owner">Use owner portal</button></div>
-          <div class="login-card"><strong>MACOKASA staff</strong><p class="footer-note">Authorized staff use the full ERP for verification, finance, safety, printing, and analytics.</p><button class="secondary-btn" type="button" data-role="staff">Use staff ERP</button></div>
-        </div>
-      </div>
       <div class="panel span-7">
         <div class="panel-header">
           <div>
             <p class="eyebrow">Operator membership</p>
-            <h2>Register a Kabaza operator</h2>
+            <h2>Operator registration form</h2>
           </div>
           <span class="status green">Annual subscription</span>
         </div>
@@ -845,10 +1103,15 @@ function renderCooperatives() {
 }
 
 function renderAnalytics() {
+  const impact = state.impact;
   const districtRows = districtCounts();
   const planRows = planCounts();
   const sexRows = sexCounts();
-  const safetyScore = Math.round((state.operators.filter((operator) => operator.hasLicense && operator.helmetUse && operator.passengerHelmet && operator.licensePlate).length / Math.max(1, state.operators.length)) * 100);
+  const safetyReady = state.operators.filter((operator) => operator.hasLicense && operator.helmetUse && operator.passengerHelmet && operator.licensePlate).length;
+  const safetyScore = Math.round((safetyReady / Math.max(1, state.operators.length)) * 100);
+  const formalizedShare = ((impact.registeredOperators / Math.max(1, impact.reportedMotorcycles)) * 100).toFixed(2);
+  const remainingGap = Math.max(0, impact.reportedMotorcycles - impact.registeredOperators);
+  const trainingGap = state.operators.filter((operator) => !operator.hasLicense).length;
   const ownerFundPanel = activeRole === "owner" || activeRole === "staff" ? `
       <div class="panel span-6">
         <div class="table-header"><h2>Owner fund progress</h2></div>
@@ -856,13 +1119,47 @@ function renderAnalytics() {
       </div>
   ` : "";
   return `
+    <section class="impact-hero">
+      <div>
+        <p class="eyebrow">Impact analytics</p>
+        <h1>Turning a large informal transport sector into verified, safer operator records.</h1>
+        <p>These figures show the registration gap, safety readiness, participation, and district reach that MACOKASA can use for public accountability and stakeholder action.</p>
+      </div>
+      <div class="impact-score-card">
+        <span>Formalized share</span>
+        <strong>${formalizedShare}%</strong>
+        <small>${compactNumber(remainingGap)} reported motorcycles still outside the current MACOKASA operator record base.</small>
+      </div>
+    </section>
+    <section class="impact-stat-grid">
+      <article><span>Estimated fleet</span><strong>${compactNumber(impact.estimatedFleet)}</strong><small>Sector scale requiring formalization</small></article>
+      <article><span>Verified operators</span><strong>${compactNumber(impact.registeredOperators)}</strong><small>MACOKASA registration footprint</small></article>
+      <article><span>Safety ready</span><strong>${safetyScore}%</strong><small>Licence, helmet, passenger helmet, and ID/plate record</small></article>
+      <article><span>Female participation</span><strong>${participationShare("Female")}%</strong><small>Women tracked from registration</small></article>
+    </section>
     <section class="grid">
-      ${metric("Operator safety score", `${safetyScore}%`, "Licence, helmet, passenger helmet, and plate")}
-      ${metric("Membership revenue", money(state.payments.filter((payment) => payment.payerType !== "donor").reduce((sum, payment) => sum + numberValue(payment.amount), 0)), "Recorded subscriptions")}
-      ${metric("Public donations", money(state.donations.reduce((sum, donation) => sum + numberValue(donation.amount), 0)), "Donation button intake")}
-      ${metric("Female participation", `${participationShare("Female")}%`, "Women tracked in the operator sector")}
+      <div class="panel span-7 impact-action-panel">
+        <div class="panel-header"><div><p class="eyebrow">Formalization gap</p><h2>Registration progress against reported sector size</h2></div></div>
+        <div class="progress-meter" style="--progress:${Math.min(100, Number(formalizedShare))}%">
+          <span></span>
+        </div>
+        <div class="impact-gap-grid">
+          <div><strong>${compactNumber(impact.registeredOperators)}</strong><span>registered operators</span></div>
+          <div><strong>${compactNumber(remainingGap)}</strong><span>remaining reported gap</span></div>
+          <div><strong>${impact.districtsReached}</strong><span>districts reached</span></div>
+        </div>
+        <p class="footer-note">The very small formalized share makes the public case for stronger registration drives, safer-rider promotion, and stakeholder-backed enforcement.</p>
+      </div>
+      <div class="panel span-5">
+        <div class="panel-header"><div><p class="eyebrow">Immediate priorities</p><h2>Where action is needed</h2></div></div>
+        <div class="split-list">
+          <div class="record-card"><strong>${trainingGap} training gap(s)</strong><span>Operators in the current record set still need licence or training support.</span></div>
+          <div class="record-card"><strong>${state.operators.filter((operator) => !operator.passengerHelmet).length} passenger helmet gap(s)</strong><span>Passenger safety records show where safer-rank promotion needs attention.</span></div>
+          <div class="record-card"><strong>${state.operators.filter((operator) => operator.operatorCategory === "Bicycle operator").length} bicycle operator record(s)</strong><span>Pedal operators are now part of the same formalization lens.</span></div>
+        </div>
+      </div>
       <div class="panel span-6">
-        <div class="table-header"><h2>Operators by district</h2></div>
+        <div class="table-header"><h2>District registration footprint</h2></div>
         ${barChart(districtRows)}
       </div>
       <div class="panel span-6">
@@ -874,9 +1171,16 @@ function renderAnalytics() {
         ${donutChart(sexRows, "Participation")}
       </div>
       ${ownerFundPanel}
-      <div class="panel span-12">
-        <div class="table-header"><h2>Impact analytics feed</h2><span class="status green">Shareable live figures</span></div>
-        <p class="footer-note">These figures can power public stories, dashboards, donor reports, and district-level registration progress without manually copying numbers.</p>
+      <div class="panel span-6">
+        <div class="table-header"><h2>Public evidence links</h2><span class="status green">Source-backed</span></div>
+        <div class="source-list evidence-grid compact">
+          ${publicSources.slice(0, 3).map((source) => `
+            <div class="source-item">
+              <a href="${source.url}" target="_blank" rel="noreferrer">${escapeHtml(source.publisher)}</a>
+              <p>${escapeHtml(source.fact)}</p>
+            </div>
+          `).join("")}
+        </div>
       </div>
     </section>
   `;
@@ -963,6 +1267,7 @@ function renderOperations() {
 function operatorForm() {
   return `
     <form class="form-grid" data-form="operator">
+      <label class="field"><span>Operator category</span>${select("operatorCategory", ["Motorcycle operator", "Bicycle operator"], "Motorcycle operator")}</label>
       <label class="field"><span>Full name</span><input class="input-control" name="fullName" required /></label>
       <label class="field"><span>Phone</span><input class="input-control" name="phone" required placeholder="+265..." /></label>
       <label class="field"><span>Email</span><input class="input-control" type="email" name="email" /></label>
@@ -971,10 +1276,10 @@ function operatorForm() {
       <label class="field"><span>District</span>${select("district", districts, "Lilongwe")}</label>
       <label class="field"><span>Operating area/rank</span><input class="input-control" name="operatingArea" required /></label>
       <label class="field"><span>Membership</span>${planSelect("membershipPlan", "regular", "Operator")}</label>
-      <label class="field"><span>Owns or rents?</span>${select("ownershipStatus", ["Owns motorcycle", "Rents motorcycle"], "Rents motorcycle")}</label>
-      <label class="field"><span>Has licence?</span>${select("hasLicense", ["Yes", "No"], "No")}</label>
-      <label class="field"><span>Licence number</span><input class="input-control" name="licenseNumber" /></label>
-      <label class="field"><span>Plate number</span><input class="input-control" name="licensePlate" placeholder="LL 0000" /></label>
+      <label class="field"><span>Owns or rents?</span>${select("ownershipStatus", ["Owns motorcycle", "Rents motorcycle", "Owns bicycle", "Rents bicycle"], "Rents motorcycle")}</label>
+      <label class="field"><span>Licence or training record?</span>${select("hasLicense", ["Yes", "No"], "No")}</label>
+      <label class="field"><span>Licence / training number</span><input class="input-control" name="licenseNumber" /></label>
+      <label class="field"><span>Plate / bicycle ID</span><input class="input-control" name="licensePlate" placeholder="LL 0000 or bicycle ID" /></label>
       <label class="field"><span>Helmet use</span>${select("helmetUse", ["Yes", "No"], "Yes")}</label>
       <label class="field"><span>Passenger helmet</span>${select("passengerHelmet", ["Yes", "No"], "No")}</label>
       <label class="field"><span>Tracker installed</span>${select("trackerInstalled", ["Yes", "No"], "No")}</label>
@@ -1033,9 +1338,9 @@ function handleClick(event) {
   if (action === "run-reminders") runReminderAutomation();
   if (action === "reconcile-sample") reconcileCashPayments();
   if (action === "donate") {
-    activeSection = "public";
+    activeSection = "donate";
     render();
-    showToast("Donation form is ready on the public website panel.");
+    showToast("Donation page is ready.");
   }
 }
 
@@ -1124,7 +1429,7 @@ async function submitPortalLogin(values) {
     return;
   }
   unlockedRoles.add(activeRole);
-  activeSection = activeRole === "owner" ? "owners" : activeRole === "printing" ? "cards" : "staff";
+  activeSection = activeRole === "owner" ? "owners" : activeRole === "printing" ? "cards" : activeRole === "webadmin" ? "content" : "staff";
   render();
   showToast(`${activeRoleLabel()} portal unlocked.`);
 }
@@ -1140,6 +1445,7 @@ async function submitOperator(values) {
     phone: values.phone,
     email: values.email,
     nationalId: values.nationalId,
+    operatorCategory: values.operatorCategory,
     sex: values.sex,
     district: values.district,
     operatingArea: values.operatingArea,
@@ -1383,6 +1689,17 @@ function metric(label, value, note, spanClass = "span-3") {
   return `<article class="metric ${spanClass}"><div class="metric-icon">${iconForMetric(label)}</div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note)}</small></article>`;
 }
 
+function themeCard(title, text, action, section, icon) {
+  return `
+    <article class="theme-card">
+      <span>${icon}</span>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+      <button class="quiet-btn" type="button" data-section="${escapeAttr(section)}">${escapeHtml(action)}</button>
+    </article>
+  `;
+}
+
 function planCard(plan) {
   return `
     <article class="plan-card" style="--plan-color:${plan.color}">
@@ -1569,8 +1886,9 @@ function formatCardNumber(value) {
 
 function operatorTable(rows) {
   if (!rows.length) return `<div class="empty-state">No operators yet.</div>`;
-  return table(["Member", "Sex", "District", "Area", "Plan", "Licence", "Safety", "Expires"], rows.map((operator) => [
+  return table(["Member", "Mode", "Sex", "District", "Area", "Plan", "Licence", "Safety", "Expires"], rows.map((operator) => [
     `<strong>${escapeHtml(operator.fullName)}</strong><br><span class="microcopy">${escapeHtml(operator.membershipNumber)}</span>`,
+    operator.operatorCategory || "Motorcycle operator",
     operator.sex || "Not recorded",
     operator.district,
     operator.operatingArea,
@@ -2122,11 +2440,12 @@ function verifyCardToken(token) {
 
 function activeRoleLabel() {
   return {
-    public: "Public visitor",
+    public: "Website",
     owner: "Motorcycle owner",
     staff: "MACOKASA staff",
-    printing: "Printing authority"
-  }[activeRole] || "Public visitor";
+    printing: "Printing authority",
+    webadmin: "WebAdmin"
+  }[activeRole] || "Website";
 }
 
 function money(value) {
