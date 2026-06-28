@@ -280,7 +280,7 @@ function renderPublicWebsite() {
         <h1>Formalizing Malawi's Kabaza economy with safer riders, verified members, and accountable ownership.</h1>
         <p>
           MACOKASA coordinates operators, motorcycle owners, cooperatives, safety partners, and public institutions through
-          verified membership, safer-rider promotion, and digital card authentication. Report unsafe conduct toll free: 0000.
+          verified membership, safer-rider promotion, and digital card authentication. Report unsafe conduct toll free: 1234XY.
         </p>
         <div class="hero-actions">
           <button class="primary-btn" type="button" data-section="registration">Register membership</button>
@@ -303,7 +303,7 @@ function renderPublicWebsite() {
     <section class="grid">
       <div class="issue-strip span-12">
         <strong>Report an issue</strong>
-        <span>Toll free line: 0000</span>
+        <span>Toll free line: 1234XY</span>
         <span>Use it for unsafe riding, fake cards, overloading, harassment, or rank security incidents.</span>
       </div>
       ${metric("Registered operators", compactNumber(impact.registeredOperators), "MACOKASA operator membership records", "span-4")}
