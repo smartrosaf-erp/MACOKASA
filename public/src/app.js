@@ -130,6 +130,17 @@ async function updateRecord(collection, id, updates) {
   }
 }
 
+async function deleteRecord(collection, id) {
+  const existing = (state[collection] || []).find((record) => record.id === id);
+  state[collection] = (state[collection] || []).filter((record) => record.id !== id);
+  persist();
+  render();
+  if (supabaseEnabled && supabaseClient && existing?._remoteId) {
+    const { error } = await supabaseClient.from("macokasa_records").delete().eq("id", existing._remoteId);
+    if (error) showToast(`Deleted on this device. Live sync needs attention.`);
+  }
+}
+
 function render() {
   if (!navItems.some(([key, , , roles]) => key === activeSection && roles.includes(activeRole))) {
     activeSection = activeRole === "owner" ? "owners" : activeRole === "printing" ? "cards" : activeRole === "webadmin" ? "content" : "public";
@@ -1330,6 +1341,18 @@ function handleClick(event) {
     showToast("Cash payment marked as deposited.");
     return;
   }
+  const deleteStory = event.target.closest("[data-delete-story]");
+  if (deleteStory) {
+    const story = state.stories.find((item) => item.id === deleteStory.dataset.deleteStory);
+    if (!story) {
+      showToast("Story was not found.");
+      return;
+    }
+    if (!window.confirm(`Delete "${story.title}" from the public website?`)) return;
+    void deleteRecord("stories", story.id);
+    showToast("Story deleted from the website.");
+    return;
+  }
   if (action === "logout") {
     unlockedRoles.delete(activeRole);
     render();
@@ -2011,14 +2034,15 @@ function cooperativeTable(rows) {
 
 function storyTable(rows) {
   if (!rows?.length) return `<div class="empty-state">No website stories have been created yet.</div>`;
-  return table(["Date", "Title", "Category", "Status", "Preview summary"], [...rows]
+  return table(["Date", "Title", "Category", "Status", "Preview summary", "Actions"], [...rows]
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .map((story) => [
       compactDate(story.createdAt),
       `<strong>${escapeHtml(story.title)}</strong>`,
       escapeHtml(story.category || "Impact"),
       statusPill(story.status || "published", story.status === "draft" ? "amber" : "green"),
-      escapeHtml(story.summary || "")
+      escapeHtml(story.summary || ""),
+      `<button class="danger-btn small-btn" type="button" data-delete-story="${escapeAttr(story.id)}">Delete</button>`
     ]));
 }
 
