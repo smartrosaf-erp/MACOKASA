@@ -369,5 +369,27 @@ export const demoState = {
       createdAt: "2026-06-10"
     }
   ],
+  stories: [
+    {
+      id: "story-001",
+      title: "Kabaza operators complete road safety practice",
+      category: "Training",
+      summary: "Operators practice controlled riding, cone navigation, helmet discipline, and road positioning during a stakeholder safety session.",
+      body: "MACOKASA uses road safety activities to connect operators, trainers, police, owners, and local leadership around safer public transport. The story demonstrates how verified membership can become a pathway to responsible riding and public confidence.",
+      imageData: "./assets/macokasa-road-safety-training.jpg",
+      status: "published",
+      createdAt: "2026-06-20"
+    },
+    {
+      id: "story-002",
+      title: "Stakeholders support safer Kabaza formalization",
+      category: "Stakeholder meeting",
+      summary: "Training partners and public safety stakeholders engage riders on licensing, protective gear, passenger safety, and rank accountability.",
+      body: "The MACOKASA IMS gives this work a practical home by linking registration, licence support, motorcycle ownership, complaints, card verification, and district-level reporting.",
+      imageData: "./assets/macokasa-rider-training.jpg",
+      status: "published",
+      createdAt: "2026-06-18"
+    }
+  ],
   reminderLogs: []
 };

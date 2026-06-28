@@ -22,4 +22,14 @@ insert into public.macokasa_records (collection, payload) values
   "trackerInstalled": false,
   "status": "training due",
   "createdAt": "2026-06-24"
+}'::jsonb),
+('stories', '{
+  "id": "story-seed-001",
+  "title": "Road safety practice strengthens Kabaza verification",
+  "category": "Training",
+  "summary": "MACOKASA and safety stakeholders are building a verified, safer Kabaza sector through training, membership, and digital card authentication.",
+  "body": "This seeded story appears on the public website and can be replaced by webpage admin posts with uploaded visuals.",
+  "imageData": "./assets/macokasa-road-safety-training.jpg",
+  "status": "published",
+  "createdAt": "2026-06-24"
 }'::jsonb);

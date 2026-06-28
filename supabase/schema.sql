@@ -18,12 +18,34 @@ create table if not exists public.macokasa_records (
       'fundEntries',
       'donations',
       'financeEntries',
+      'stories',
       'reminderLogs'
     )
   ),
   payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+alter table public.macokasa_records
+drop constraint if exists macokasa_records_collection_check;
+
+alter table public.macokasa_records
+add constraint macokasa_records_collection_check
+check (
+  collection in (
+    'operators',
+    'owners',
+    'motorcycles',
+    'payments',
+    'cards',
+    'cooperatives',
+    'fundEntries',
+    'donations',
+    'financeEntries',
+    'stories',
+    'reminderLogs'
+  )
 );
 
 create index if not exists macokasa_records_collection_idx
