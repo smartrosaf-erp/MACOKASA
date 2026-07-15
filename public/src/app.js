@@ -173,7 +173,7 @@ function render() {
         <div class="top-actions">
           ${activeRole === "public" ? `
             <button class="donate-header-btn" type="button" data-section="donate">Donate</button>
-            <button class="portal-header-btn" type="button" data-section="portal">Staff / Partner</button>
+            <button class="portal-header-btn" type="button" data-section="portal">Portal</button>
           ` : `<button class="quiet-btn" type="button" data-role="public">Website</button>`}
           ${activeRole !== "public" && roleUnlocked ? `<button class="quiet-btn" type="button" data-action="logout">Lock portal</button>` : ""}
         </div>
@@ -426,7 +426,7 @@ function renderStoriesPage() {
       </div>
       <div class="panel span-4">
         <h2>Web admin posting</h2>
-        <p class="footer-note">Authorized WebAdmin partners can publish stories with visuals from the Staff / Partner portal.</p>
+        <p class="footer-note">Authorized WebAdmin partners can publish stories with visuals from the Portal.</p>
         <button class="secondary-btn" type="button" data-section="portal">Open portal access</button>
       </div>
     </section>
