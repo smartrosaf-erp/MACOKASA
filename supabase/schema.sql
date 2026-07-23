@@ -154,6 +154,45 @@ on public.reminder_jobs for insert
 to anon, authenticated
 with check (true);
 
+insert into storage.buckets (
+  id,
+  name,
+  public,
+  file_size_limit,
+  allowed_mime_types
+)
+values (
+  'member-photos',
+  'member-photos',
+  true,
+  1048576,
+  array['image/jpeg', 'image/png', 'image/webp']
+)
+on conflict (id) do update
+set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Public read MACOKASA member photos" on storage.objects;
+create policy "Public read MACOKASA member photos"
+on storage.objects for select
+to anon, authenticated
+using (bucket_id = 'member-photos');
+
+drop policy if exists "Upload MACOKASA member photos" on storage.objects;
+create policy "Upload MACOKASA member photos"
+on storage.objects for insert
+to anon, authenticated
+with check (bucket_id = 'member-photos');
+
+drop policy if exists "Update MACOKASA member photos" on storage.objects;
+create policy "Update MACOKASA member photos"
+on storage.objects for update
+to anon, authenticated
+using (bucket_id = 'member-photos')
+with check (bucket_id = 'member-photos');
+
 create or replace view public.operator_membership_summary as
 select
   payload ->> 'district' as district,

@@ -32,7 +32,7 @@ The included `render.yaml` also describes the Render static site settings.
 ## Supabase
 
 1. Create a Supabase project.
-2. Run `supabase/schema.sql` in the SQL editor.
+2. Run `supabase/schema.sql` in the SQL editor. It is safe to rerun after updates and creates the `member-photos` storage bucket.
 3. Optionally run `supabase/seed.sql`.
 4. Add `SUPABASE_URL` and `SUPABASE_ANON_KEY` to Render.
 5. Do not add `SUPABASE_SERVICE_ROLE_KEY` to this Render static site.
@@ -42,8 +42,11 @@ The included `render.yaml` also describes the Render static site settings.
 - Membership reminders run from the ERP Operations Control screen and record dispatch logs for Email, WhatsApp, and SMS channels.
 - Cash payments require collector name and remain unreconciled until marked deposited.
 - Replacement, upgrade, or downgrade card issuance invalidates the old QR token and queues a new card.
+- Operator registration requires a face photo, supports live camera capture or file upload, and assigns the saved portrait to the member's first ID-card print record.
 - Donation and subscription screens support bank card, AirtelMoney, Mpamba, EFT, and cash recording with finance reconciliation.
 - The card preview updates live when the operator name, membership class, district, area, sex, or photo changes.
+
+Camera capture works on `localhost` during testing and on HTTPS after deployment. The browser asks the registrar for camera permission when **Open camera** is selected.
 
 ## Production Hardening
 

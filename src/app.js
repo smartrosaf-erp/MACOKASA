@@ -21,6 +21,10 @@ let subscriptionChoice = { method: "airtel", amount: "15000" };
 let editingStoryId = "";
 let selectedStoryId = "";
 let storyFilter = "All";
+let selectedCardOperatorId = "";
+let activeCameraStream = null;
+let activeCameraForm = null;
+let cameraRequestId = 0;
 let state = loadState();
 let liveCollectionBaselines = {
   operators: state.operators?.length || 0,
@@ -196,7 +200,7 @@ function handleRealtimeRecord(change) {
   liveDataStatus = "live";
   lastLiveSyncAt = new Date();
   persist();
-  if (activeRole === "public") render();
+  if (activeRole === "public" && !["registration", "donate", "portal", "partner"].includes(activeSection)) render();
 }
 
 async function addRecord(collection, record) {
@@ -258,6 +262,7 @@ async function deleteRecord(collection, id) {
 }
 
 function render() {
+  stopMemberCamera();
   if (!navItems.some(([key, , , roles]) => key === activeSection && roles.includes(activeRole))) {
     activeSection = activeRole === "owner" ? "owners" : activeRole === "printing" ? "cards" : activeRole === "webadmin" ? "content" : "public";
   }
@@ -1296,8 +1301,11 @@ function renderPayments() {
 }
 
 function renderCards() {
-  const selectedOperator = state.operators[0];
-  const selectedCard = state.cards.find((card) => card.operatorId === selectedOperator?.id && card.status === "active") || state.cards[0];
+  const selectedOperator = state.operators.find((operator) => operator.id === selectedCardOperatorId) || state.operators[0];
+  if (selectedOperator) selectedCardOperatorId = selectedOperator.id;
+  const selectedCard = state.cards.find((card) => card.operatorId === selectedOperator?.id && card.status === "active")
+    || state.cards.find((card) => card.operatorId === selectedOperator?.id)
+    || state.cards[0];
   return `
     <section class="grid">
       <div class="panel span-12">
@@ -1630,6 +1638,48 @@ function renderOperations() {
   `;
 }
 
+function memberPhotoCapture() {
+  return `
+    <fieldset class="member-photo-capture field full" data-member-photo-capture>
+      <legend>Member face photo <span>Required for the ID card</span></legend>
+      <div class="member-photo-workspace">
+        <div class="member-face-preview" data-member-photo-preview>
+          <img data-member-photo-image alt="Captured member face preview" hidden />
+          <div class="member-photo-placeholder">
+            ${iconCamera()}
+            <strong>No face photo captured</strong>
+            <span>Place the member alone in good light and face the camera directly.</span>
+          </div>
+        </div>
+        <div class="member-photo-console">
+          <div class="member-camera-stage" data-member-camera-stage hidden>
+            <video data-member-camera-video autoplay muted playsinline aria-label="Live member camera"></video>
+            <div class="camera-face-guide" aria-hidden="true"></div>
+            <span>Keep the face inside the guide</span>
+          </div>
+          <div class="member-photo-guidance" data-member-photo-guidance>
+            <strong>Photo for the member ID</strong>
+            <p>Open the front camera and capture one clear, forward-facing portrait. The saved image will be assigned to this member's printed and digital ID.</p>
+          </div>
+          <canvas data-member-photo-canvas width="480" height="600" hidden></canvas>
+          <input type="hidden" name="photoData" data-member-photo-data />
+          <div class="member-photo-actions">
+            <button class="primary-btn" type="button" data-action="start-member-camera">${iconCamera()} Open camera</button>
+            <button class="secondary-btn" type="button" data-action="capture-member-photo" hidden>${iconCheck()} Capture photo</button>
+            <button class="quiet-btn" type="button" data-action="stop-member-camera" hidden>Cancel camera</button>
+            <label class="quiet-btn member-photo-upload">
+              ${iconUpload()} Choose photo
+              <input type="file" accept="image/*" data-member-photo-upload />
+            </label>
+            <button class="danger-btn" type="button" data-action="clear-member-photo" hidden>Remove photo</button>
+          </div>
+          <p class="member-camera-status" data-member-camera-status aria-live="polite">The browser will ask for camera permission. A photo file can be used when a camera is unavailable.</p>
+        </div>
+      </div>
+    </fieldset>
+  `;
+}
+
 function operatorForm() {
   return `
     <form class="form-grid" data-form="operator">
@@ -1639,6 +1689,7 @@ function operatorForm() {
       <label class="field"><span>Email</span><input class="input-control" type="email" name="email" /></label>
       <label class="field"><span>National ID</span><input class="input-control" name="nationalId" /></label>
       <label class="field"><span>Sex</span>${select("sex", ["Male", "Female"], "Male")}</label>
+      ${memberPhotoCapture()}
       <label class="field"><span>District</span>${select("district", districts, "Lilongwe")}</label>
       <label class="field"><span>Operating area/rank</span><input class="input-control" name="operatingArea" required /></label>
       <label class="field"><span>Membership</span>${planSelect("membershipPlan", "regular", "Operator")}</label>
@@ -1701,6 +1752,23 @@ function handleClick(event) {
     return;
   }
   const action = event.target.closest("[data-action]")?.dataset.action;
+  const memberForm = event.target.closest('form[data-form="operator"]');
+  if (action === "start-member-camera") {
+    void startMemberCamera(memberForm);
+    return;
+  }
+  if (action === "capture-member-photo") {
+    captureMemberPhoto(memberForm);
+    return;
+  }
+  if (action === "stop-member-camera") {
+    stopMemberCamera(memberForm, "Camera closed. The member photo has not changed.");
+    return;
+  }
+  if (action === "clear-member-photo") {
+    clearMemberPhoto(memberForm);
+    return;
+  }
   const paymentMethod = event.target.closest("[data-payment-method]");
   if (paymentMethod) {
     const context = paymentMethod.dataset.paymentContext;
@@ -1772,18 +1840,23 @@ function handleChange(event) {
     activeRole = event.target.value;
     render();
   }
+  if (event.target.matches("[data-card-operator-select]")) {
+    selectedCardOperatorId = event.target.value;
+    render();
+    return;
+  }
+  if (event.target.matches("[data-member-photo-upload]")) {
+    const file = event.target.files?.[0];
+    const form = event.target.closest('form[data-form="operator"]');
+    if (file && form) void useMemberPhotoFile(form, file);
+    return;
+  }
   if (event.target.matches("[data-card-photo]")) {
     const file = event.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const photo = document.querySelector("[data-card-photo-preview]");
-      if (photo) {
-        photo.style.backgroundImage = `url("${reader.result}")`;
-        photo.classList.add("has-image");
-      }
-    };
-    reader.readAsDataURL(file);
+    const operatorId = event.target.closest("[data-card-designer]")?.dataset.operatorId;
+    if (operatorId) void replaceMemberPhoto(operatorId, file);
+    return;
   }
   if (event.target.matches("[data-story-image]")) {
     const files = [...(event.target.files || [])];
@@ -1824,6 +1897,228 @@ function handleInput(event) {
   if (event.target.matches("[data-card-field]")) updatePaymentCardPreview(event.target.closest("[data-payment-widget]"));
 }
 
+async function startMemberCamera(form) {
+  if (!form) return;
+  stopMemberCamera();
+  const requestId = ++cameraRequestId;
+  const status = form.querySelector("[data-member-camera-status]");
+  if (!navigator.mediaDevices?.getUserMedia) {
+    if (status) status.textContent = "This browser cannot open a live camera. Choose a photo file instead.";
+    return;
+  }
+  const stage = form.querySelector("[data-member-camera-stage]");
+  const video = form.querySelector("[data-member-camera-video]");
+  const openButton = form.querySelector('[data-action="start-member-camera"]');
+  const captureButton = form.querySelector('[data-action="capture-member-photo"]');
+  const stopButton = form.querySelector('[data-action="stop-member-camera"]');
+  const uploadButton = form.querySelector("[data-member-photo-upload]")?.closest("label");
+  const guidance = form.querySelector("[data-member-photo-guidance]");
+  activeCameraForm = form;
+  if (stage) stage.hidden = false;
+  if (guidance) guidance.hidden = true;
+  if (openButton) openButton.hidden = true;
+  if (captureButton) captureButton.hidden = false;
+  if (stopButton) stopButton.hidden = false;
+  if (uploadButton) uploadButton.hidden = true;
+  if (status) status.textContent = "Allow camera access, then keep the member's face inside the guide.";
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: "user",
+        width: { ideal: 1280 },
+        height: { ideal: 960 }
+      },
+      audio: false
+    });
+    if (requestId !== cameraRequestId || activeCameraForm !== form || !form.isConnected) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    activeCameraStream = stream;
+    if (video) {
+      video.srcObject = activeCameraStream;
+      await video.play();
+    }
+  } catch (error) {
+    if (requestId !== cameraRequestId) return;
+    console.error(error);
+    stopMemberCamera(form, cameraErrorMessage(error));
+  }
+}
+
+function captureMemberPhoto(form) {
+  if (!form) return;
+  const video = form.querySelector("[data-member-camera-video]");
+  const canvas = form.querySelector("[data-member-photo-canvas]");
+  const status = form.querySelector("[data-member-camera-status]");
+  if (!video || !canvas || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+    if (status) status.textContent = "The camera is still preparing. Hold still and try capture again.";
+    return;
+  }
+  drawPortraitImage(video, video.videoWidth, video.videoHeight, canvas);
+  const photoData = canvas.toDataURL("image/jpeg", 0.84);
+  stopMemberCamera(form);
+  setMemberPhoto(form, photoData, "Face photo captured. Review it before registering the member.");
+}
+
+function stopMemberCamera(form = activeCameraForm, message = "") {
+  cameraRequestId += 1;
+  if (activeCameraStream) activeCameraStream.getTracks().forEach((track) => track.stop());
+  activeCameraStream = null;
+  const targetForm = form || activeCameraForm;
+  if (targetForm) {
+    const video = targetForm.querySelector("[data-member-camera-video]");
+    const stage = targetForm.querySelector("[data-member-camera-stage]");
+    const openButton = targetForm.querySelector('[data-action="start-member-camera"]');
+    const captureButton = targetForm.querySelector('[data-action="capture-member-photo"]');
+    const stopButton = targetForm.querySelector('[data-action="stop-member-camera"]');
+    const uploadButton = targetForm.querySelector("[data-member-photo-upload]")?.closest("label");
+    const guidance = targetForm.querySelector("[data-member-photo-guidance]");
+    const status = targetForm.querySelector("[data-member-camera-status]");
+    if (video) {
+      video.pause();
+      video.srcObject = null;
+    }
+    if (stage) stage.hidden = true;
+    if (guidance) guidance.hidden = false;
+    if (openButton) openButton.hidden = false;
+    if (captureButton) captureButton.hidden = true;
+    if (stopButton) stopButton.hidden = true;
+    if (uploadButton) uploadButton.hidden = false;
+    if (status && message) status.textContent = message;
+  }
+  activeCameraForm = null;
+}
+
+function clearMemberPhoto(form) {
+  if (!form) return;
+  stopMemberCamera(form);
+  const hidden = form.querySelector("[data-member-photo-data]");
+  const preview = form.querySelector("[data-member-photo-preview]");
+  const image = form.querySelector("[data-member-photo-image]");
+  const clearButton = form.querySelector('[data-action="clear-member-photo"]');
+  const openButton = form.querySelector('[data-action="start-member-camera"]');
+  const status = form.querySelector("[data-member-camera-status]");
+  if (hidden) hidden.value = "";
+  if (image) {
+    image.hidden = true;
+    image.removeAttribute("src");
+  }
+  preview?.classList.remove("has-photo");
+  if (clearButton) clearButton.hidden = true;
+  if (openButton) openButton.innerHTML = `${iconCamera()} Open camera`;
+  if (status) status.textContent = "Photo removed. Capture or choose a face photo before registration.";
+}
+
+function setMemberPhoto(form, photoData, message) {
+  const hidden = form.querySelector("[data-member-photo-data]");
+  const preview = form.querySelector("[data-member-photo-preview]");
+  const image = form.querySelector("[data-member-photo-image]");
+  const clearButton = form.querySelector('[data-action="clear-member-photo"]');
+  const openButton = form.querySelector('[data-action="start-member-camera"]');
+  const status = form.querySelector("[data-member-camera-status]");
+  if (hidden) hidden.value = photoData;
+  if (image) {
+    image.src = photoData;
+    image.hidden = false;
+  }
+  preview?.classList.add("has-photo");
+  if (clearButton) clearButton.hidden = false;
+  if (openButton) openButton.innerHTML = `${iconCamera()} Retake photo`;
+  if (status) status.textContent = message;
+}
+
+async function useMemberPhotoFile(form, file) {
+  const status = form.querySelector("[data-member-camera-status]");
+  if (status) status.textContent = "Preparing the selected face photo...";
+  try {
+    const photoData = await prepareMemberPhoto(file);
+    stopMemberCamera(form);
+    setMemberPhoto(form, photoData, "Face photo ready. Review it before registering the member.");
+  } catch (error) {
+    console.error(error);
+    if (status) status.textContent = "The selected image could not be prepared. Choose another photo.";
+  }
+}
+
+async function replaceMemberPhoto(operatorId, file) {
+  try {
+    const photoData = await prepareMemberPhoto(file);
+    const storedPhoto = await storeMemberPhoto(operatorId, photoData);
+    await updateRecord("operators", operatorId, {
+      photoData: storedPhoto,
+      photoUrl: storedPhoto.startsWith("http") ? storedPhoto : "",
+      photoCapturedAt: new Date().toISOString()
+    });
+    showToast("The saved member photo and ID preview were updated.");
+  } catch (error) {
+    console.error(error);
+    showToast("The selected member photo could not be saved.");
+  }
+}
+
+async function prepareMemberPhoto(file) {
+  const source = await readImageFile(file);
+  const image = await new Promise((resolve, reject) => {
+    const element = new Image();
+    element.onload = () => resolve(element);
+    element.onerror = reject;
+    element.src = source;
+  });
+  const canvas = document.createElement("canvas");
+  canvas.width = 480;
+  canvas.height = 600;
+  drawPortraitImage(image, image.naturalWidth, image.naturalHeight, canvas);
+  return canvas.toDataURL("image/jpeg", 0.84);
+}
+
+function drawPortraitImage(source, sourceWidth, sourceHeight, canvas) {
+  const targetRatio = canvas.width / canvas.height;
+  const sourceRatio = sourceWidth / sourceHeight;
+  let sourceX = 0;
+  let sourceY = 0;
+  let cropWidth = sourceWidth;
+  let cropHeight = sourceHeight;
+  if (sourceRatio > targetRatio) {
+    cropWidth = sourceHeight * targetRatio;
+    sourceX = (sourceWidth - cropWidth) / 2;
+  } else {
+    cropHeight = sourceWidth / targetRatio;
+    sourceY = Math.max(0, (sourceHeight - cropHeight) * 0.34);
+  }
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#eef2f4";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(source, sourceX, sourceY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+}
+
+async function storeMemberPhoto(memberId, photoData) {
+  if (!supabaseEnabled || !supabaseClient || !photoData.startsWith("data:")) return photoData;
+  try {
+    const photoBlob = await fetch(photoData).then((response) => response.blob());
+    const version = Date.now();
+    const filePath = `${String(memberId).replace(/[^a-zA-Z0-9-_]/g, "")}/id-photo.jpg`;
+    const { error } = await supabaseClient.storage.from("member-photos").upload(filePath, photoBlob, {
+      contentType: "image/jpeg",
+      cacheControl: "3600",
+      upsert: true
+    });
+    if (error) throw error;
+    const { data } = supabaseClient.storage.from("member-photos").getPublicUrl(filePath);
+    return data?.publicUrl ? `${data.publicUrl}?v=${version}` : photoData;
+  } catch (error) {
+    console.error(error);
+    return photoData;
+  }
+}
+
+function cameraErrorMessage(error) {
+  if (error?.name === "NotAllowedError") return "Camera permission was not granted. Allow access in the browser or choose a photo file.";
+  if (error?.name === "NotFoundError") return "No camera was found on this device. Choose a photo file instead.";
+  if (error?.name === "NotReadableError") return "The camera is being used by another application. Close it there and try again.";
+  return "The camera could not start. Check browser permission or choose a photo file.";
+}
+
 async function handleSubmit(event) {
   const form = event.target.closest("form[data-form]");
   if (!form) return;
@@ -1858,9 +2153,15 @@ async function submitPortalLogin(values) {
 }
 
 async function submitOperator(values) {
+  if (!values.photoData) {
+    showToast("Capture or choose the member's face photo before registration.");
+    document.querySelector("[data-member-photo-capture]")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
   const plan = planByKey(values.membershipPlan);
   const id = newId("op");
   const districtCode = (values.district || "MW").slice(0, 2).toUpperCase();
+  const storedPhoto = await storeMemberPhoto(id, values.photoData);
   const operator = {
     id,
     membershipNumber: `MCK-${districtCode}-${new Date().getFullYear()}-${String(state.operators.length + 1).padStart(4, "0")}`,
@@ -1884,10 +2185,23 @@ async function submitOperator(values) {
     licensePlate: values.licensePlate,
     trackerInstalled: values.trackerInstalled === "Yes",
     status: values.hasLicense === "Yes" ? "active" : "training due",
-    photoData: "",
+    photoData: storedPhoto,
+    photoUrl: storedPhoto.startsWith("http") ? storedPhoto : "",
+    photoCapturedAt: new Date().toISOString(),
     createdAt: today()
   };
   await addRecord("operators", operator);
+  selectedCardOperatorId = operator.id;
+  await addRecord("cards", {
+    id: newId("card"),
+    operatorId: operator.id,
+    cardNumber: `CARD-MCK-${String(state.cards.length + 1).padStart(4, "0")}`,
+    qrToken: `qr-${operator.id}-${Date.now()}`,
+    status: "print queue",
+    membershipPlan: operator.membershipPlan,
+    issuedAt: "",
+    replacedBy: ""
+  });
   await addRecord("payments", {
     id: newId("pay"),
     payerName: operator.fullName,
@@ -1901,7 +2215,7 @@ async function submitOperator(values) {
     status: "pending",
     createdAt: today()
   });
-  showToast("Operator registered and a pending subscription payment was created.");
+  showToast("Member registered. Face photo saved and the assigned ID card is in the print queue.");
 }
 
 async function submitPayment(values) {
@@ -2293,14 +2607,19 @@ function storyCards(rows) {
 
 function cardDesignerForm(operator, card) {
   return `
-    <form class="form-grid card-designer" data-card-designer>
+    <form class="form-grid card-designer" data-card-designer data-operator-id="${escapeAttr(operator.id)}">
+      <label class="field full"><span>Member assigned to this ID</span>
+        <select class="select-control" data-card-operator-select>
+          ${state.operators.map((item) => `<option value="${escapeAttr(item.id)}" ${item.id === operator.id ? "selected" : ""}>${escapeHtml(item.fullName)} - ${escapeHtml(item.membershipNumber)}</option>`).join("")}
+        </select>
+      </label>
       <label class="field"><span>Name on card</span><input class="input-control" name="cardName" value="${escapeAttr(operator.fullName)}" /></label>
       <label class="field"><span>Membership class</span>${planSelect("cardPlan", card?.membershipPlan || operator.membershipPlan, "Operator")}</label>
       <label class="field"><span>Membership number</span><input class="input-control" name="cardNumber" value="${escapeAttr(operator.membershipNumber)}" /></label>
       <label class="field"><span>Sex</span>${select("cardSex", ["Male", "Female"], operator.sex || "Male")}</label>
       <label class="field"><span>Operating area</span><input class="input-control" name="cardArea" value="${escapeAttr(operator.operatingArea)}" /></label>
       <label class="field"><span>District</span>${select("cardDistrict", districts, operator.district)}</label>
-      <label class="field"><span>Photo</span><input class="input-control" type="file" accept="image/*" data-card-photo /></label>
+      <label class="field"><span>Replace saved face photo</span><input class="input-control" type="file" accept="image/*" data-card-photo /></label>
     </form>
   `;
 }
@@ -2423,7 +2742,7 @@ function formatCardNumber(value) {
 function operatorTable(rows) {
   if (!rows.length) return `<div class="empty-state">No operators yet.</div>`;
   return table(["Member", "Mode", "Sex", "District", "Area", "Plan", "Licence", "Safety", "Expires"], rows.map((operator) => [
-    `<strong>${escapeHtml(operator.fullName)}</strong><br><span class="microcopy">${escapeHtml(operator.membershipNumber)}</span>`,
+    `<div class="operator-identity"><img src="${escapeAttr(operator.photoUrl || operator.photoData || "./assets/member-photo-placeholder.png")}" alt="" /><div><strong>${escapeHtml(operator.fullName)}</strong><br><span class="microcopy">${escapeHtml(operator.membershipNumber)}</span></div></div>`,
     operator.operatorCategory || "Motorcycle operator",
     operator.sex || "Not recorded",
     operator.district,
@@ -2598,6 +2917,7 @@ function cardPreview(operator, card) {
   const plan = planByKey(card?.membershipPlan || operator.membershipPlan);
   const token = card?.qrToken || `qr-${operator.id}-preview`;
   const verifyUrl = `${appBaseUrl()}/?verify=${encodeURIComponent(token)}`;
+  const memberPhoto = operator.photoUrl || operator.photoData || "./assets/member-photo-placeholder.png";
   return `
     <div class="card-preview">
       <div class="card-stack">
@@ -2612,7 +2932,7 @@ function cardPreview(operator, card) {
           </div>
           <div class="id-card-body">
             <div class="member-photo-panel">
-              <div class="member-photo has-image" data-card-photo-preview style="background-image:url('./assets/member-photo-placeholder.png')">
+              <div class="member-photo has-image" data-card-photo-preview style="background-image:url('${escapeAttr(memberPhoto)}')">
                 <span class="member-initials">${initials(operator.fullName)}</span>
               </div>
               <span class="card-tier photo-tier" data-card-plan-label>${escapeHtml(plan?.name || "Member")}</span>
@@ -3079,6 +3399,9 @@ function iconCoop() { return svg("M7 11a4 4 0 1 1 8 0M3 21a6 6 0 0 1 12 0M17 7h4
 function iconChart() { return svg("M4 20V4M4 20h16M8 16v-5M12 16V8M16 16v-9"); }
 function iconStory() { return svg("M4 5h16v14H4V5Zm3 3h10M7 12h10M7 16h6"); }
 function iconCloud() { return svg("M17 18H7a4 4 0 1 1 .8-7.9A5.5 5.5 0 0 1 18 9.5 4.25 4.25 0 0 1 17 18Z"); }
+function iconCamera() { return svg("M4 7h3l1.5-2h7L17 7h3v12H4V7Zm8 3a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"); }
+function iconCheck() { return svg("m5 12 4 4L19 6"); }
+function iconUpload() { return svg("M12 16V4m0 0L7 9m5-5 5 5M5 15v5h14v-5"); }
 function iconArrow() { return svg("M5 12h14M14 7l5 5-5 5"); }
 function iconArrowLeft() { return svg("M19 12H5M10 7l-5 5 5 5"); }
 function svg(path) {
