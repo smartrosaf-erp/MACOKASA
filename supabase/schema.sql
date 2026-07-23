@@ -19,6 +19,7 @@ create table if not exists public.macokasa_records (
       'donations',
       'financeEntries',
       'stories',
+      'storyTombstones',
       'reminderLogs'
     )
   ),
@@ -44,6 +45,7 @@ check (
     'donations',
     'financeEntries',
     'stories',
+    'storyTombstones',
     'reminderLogs'
   )
 );
@@ -89,6 +91,20 @@ create trigger macokasa_records_touch_updated_at
 before update on public.macokasa_records
 for each row execute function public.touch_updated_at();
 
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'macokasa_records'
+  ) then
+    alter publication supabase_realtime add table public.macokasa_records;
+  end if;
+end;
+$$;
+
 alter table public.macokasa_records enable row level security;
 alter table public.card_verifications enable row level security;
 alter table public.reminder_jobs enable row level security;
@@ -113,6 +129,12 @@ on public.macokasa_records for update
 to anon, authenticated
 using (true)
 with check (true);
+
+drop policy if exists "Review delete records" on public.macokasa_records;
+create policy "Review delete records"
+on public.macokasa_records for delete
+to anon, authenticated
+using (true);
 
 drop policy if exists "Review log card scans" on public.card_verifications;
 create policy "Review log card scans"

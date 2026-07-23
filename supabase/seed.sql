@@ -26,12 +26,15 @@ insert into public.macokasa_records (collection, payload) values
 }'::jsonb),
 ('stories', '{
   "id": "story-seed-001",
-  "title": "Road safety practice strengthens Kabaza verification",
+  "title": "ROSAF partnership links membership to practical rider training",
   "category": "Training",
-  "summary": "MACOKASA and safety stakeholders are building a verified, safer Kabaza sector through training, membership, and digital card authentication.",
-  "body": "This seeded story appears on the public website and can be replaced by webpage admin posts with uploaded visuals.",
-  "images": ["./assets/macokasa-road-safety-training.jpg", "./assets/macokasa-rider-training.jpg"],
-  "imageData": "./assets/macokasa-road-safety-training.jpg",
+  "location": "Lilongwe",
+  "partners": ["ROSAF", "MACOKASA"],
+  "impactLine": "Membership becomes a pathway to practical skills, refresher learning, and support towards formal licensing.",
+  "summary": "Through ROSAF, registered members can access reduced-fee training support that turns road-safety messages into supervised riding practice.",
+  "body": "MACOKASA links registered members who need instruction or refresher support to the ROSAF training pathway. The shared record helps the coalition recognise progress and identify where more support is needed.",
+  "images": ["./assets/rosaf-road-safety-practical.jpg", "./assets/kabaza-safety-mobilisation.jpg"],
+  "imageData": "./assets/rosaf-road-safety-practical.jpg",
   "status": "published",
-  "createdAt": "2026-06-24"
+  "createdAt": "2026-07-19"
 }'::jsonb);

@@ -2,21 +2,31 @@ import { affiliatedMembers, demoState, districts, membershipPlans, paymentMethod
 
 const config = window.MACOKASA_CONFIG || {};
 const app = document.querySelector("#app");
-const storageKey = "macokasa-kabaza-state-v2";
+const storageKey = "macokasa-kabaza-state-v3";
 const defaultStoryImage = "./assets/macokasa-road-safety-training.jpg";
-const collections = ["operators", "owners", "motorcycles", "payments", "cards", "cooperatives", "fundEntries", "donations", "financeEntries", "stories", "reminderLogs"];
+const collections = ["operators", "owners", "motorcycles", "payments", "cards", "cooperatives", "fundEntries", "donations", "financeEntries", "stories", "storyTombstones", "reminderLogs"];
 let activeSection = "public";
 let activeRole = "public";
 let toastTimer = null;
 let supabaseClient = null;
 let supabaseEnabled = false;
+let realtimeChannel = null;
+let liveDataStatus = config.useDemoData ? "local" : "connecting";
+let lastLiveSyncAt = null;
 let unlockedRoles = new Set(["public"]);
 let pendingRole = "";
 let ownerFundFilterId = "all";
 let donationChoice = { method: "card", amount: "50000" };
 let subscriptionChoice = { method: "airtel", amount: "15000" };
 let editingStoryId = "";
+let selectedStoryId = "";
+let storyFilter = "All";
 let state = loadState();
+let liveCollectionBaselines = {
+  operators: state.operators?.length || 0,
+  motorcycles: state.motorcycles?.length || 0,
+  owners: state.owners?.length || 0
+};
 
 const navItems = [
   ["public", "Home", iconHome, ["public"]],
@@ -53,9 +63,15 @@ function init() {
 
 function loadState() {
   try {
-    const stored = window.localStorage.getItem(storageKey);
+    const currentStored = window.localStorage.getItem(storageKey);
+    const legacyStored = window.localStorage.getItem("macokasa-kabaza-state-v2");
+    const stored = currentStored || legacyStored;
     if (stored) {
       const normalized = normalizeState({ ...clone(demoState), ...JSON.parse(stored) });
+      if (!currentStored && legacyStored) {
+        normalized.stories = (normalized.stories || []).filter((story) => !["story-001", "story-002"].includes(story.id));
+      }
+      normalized.stories = mergeStoryDefaults(normalized.stories, normalized.storyTombstones);
       window.localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(collections.map((key) => [key, normalized[key] || []]))));
       return normalized;
     }
@@ -82,12 +98,25 @@ function normalizeState(value) {
   return JSON.parse(scrubbed);
 }
 
+function mergeStoryDefaults(stories = [], tombstones = []) {
+  const existing = new Map(stories.map((story) => [story.id, story]));
+  const deletedIds = new Set(tombstones.map((record) => record.storyId));
+  const mergedDefaults = (demoState.stories || [])
+    .filter((story) => !deletedIds.has(story.id))
+    .map((story) => ({ ...story, ...(existing.get(story.id) || {}) }));
+  const customStories = stories.filter((story) => !demoState.stories.some((item) => item.id === story.id));
+  return [...customStories, ...mergedDefaults];
+}
+
 function persist() {
   window.localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(collections.map((key) => [key, state[key] || []]))));
 }
 
 async function connectSupabase() {
-  if (!config.supabaseUrl || !config.supabaseAnonKey || config.useDemoData) return;
+  if (!config.supabaseUrl || !config.supabaseAnonKey || config.useDemoData) {
+    liveDataStatus = "local";
+    return;
+  }
   try {
     const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
     supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey);
@@ -99,15 +128,75 @@ async function connectSupabase() {
       grouped[row.collection].push({ ...row.payload, _remoteId: row.id });
     });
     collections.forEach((collection) => {
-      if (grouped[collection]?.length) state[collection] = grouped[collection];
+      if (collection !== "stories" && grouped[collection]?.length) state[collection] = grouped[collection];
     });
+    if (grouped.stories?.length) state.stories = grouped.stories;
+    state.stories = mergeStoryDefaults(state.stories, state.storyTombstones);
+    liveCollectionBaselines = {
+      operators: state.operators?.length || 0,
+      motorcycles: state.motorcycles?.length || 0,
+      owners: state.owners?.length || 0
+    };
     supabaseEnabled = true;
+    liveDataStatus = "live";
+    lastLiveSyncAt = new Date();
+    subscribeToRealtime();
     render();
-    showToast("Live records loaded.");
+    showToast("Live MACOKASA records loaded.");
   } catch (error) {
     console.error(error);
+    liveDataStatus = "local";
     showToast("Records are available on this device.");
   }
+}
+
+function subscribeToRealtime() {
+  if (!supabaseClient || realtimeChannel) return;
+  realtimeChannel = supabaseClient
+    .channel("macokasa-public-live")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "macokasa_records" },
+      handleRealtimeRecord
+    )
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        liveDataStatus = "live";
+        lastLiveSyncAt = new Date();
+        if (activeRole === "public") render();
+      }
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        liveDataStatus = "reconnecting";
+        if (activeRole === "public") render();
+      }
+    });
+}
+
+function handleRealtimeRecord(change) {
+  const row = change.new?.collection ? change.new : change.old;
+  const remoteId = row?.id;
+  const collection = row?.collection || collections.find((key) => (state[key] || []).some((record) => record._remoteId === remoteId));
+  if (!collections.includes(collection)) return;
+  const payload = row.payload || {};
+  const records = state[collection] || [];
+  if (change.eventType === "DELETE") {
+    state[collection] = records.filter((record) => record._remoteId !== remoteId);
+  } else {
+    const record = { ...payload, _remoteId: remoteId };
+    const matchIndex = records.findIndex((item) => item._remoteId === remoteId || (record.id && item.id === record.id));
+    if (matchIndex >= 0) {
+      state[collection] = records.map((item, index) => index === matchIndex ? record : item);
+    } else {
+      state[collection] = [record, ...records];
+    }
+  }
+  if (collection === "stories" || collection === "storyTombstones") {
+    state.stories = mergeStoryDefaults(state.stories, state.storyTombstones);
+  }
+  liveDataStatus = "live";
+  lastLiveSyncAt = new Date();
+  persist();
+  if (activeRole === "public") render();
 }
 
 async function addRecord(collection, record) {
@@ -115,8 +204,13 @@ async function addRecord(collection, record) {
   persist();
   render();
   if (supabaseEnabled && supabaseClient) {
-    const { error } = await supabaseClient.from("macokasa_records").insert({ collection, payload: record });
+    const { data, error } = await supabaseClient.from("macokasa_records").insert({ collection, payload: record }).select("id").single();
     if (error) showToast(`Saved on this device. Live sync needs attention.`);
+    if (data?.id) {
+      state[collection] = state[collection].map((item) => item.id === record.id ? { ...item, _remoteId: data.id } : item);
+      lastLiveSyncAt = new Date();
+      persist();
+    }
   }
 }
 
@@ -124,22 +218,42 @@ async function updateRecord(collection, id, updates) {
   state[collection] = (state[collection] || []).map((record) => record.id === id ? { ...record, ...updates } : record);
   persist();
   render();
-  const remote = state[collection].find((record) => record.id === id)?._remoteId;
-  if (supabaseEnabled && supabaseClient && remote) {
-    const payload = state[collection].find((record) => record.id === id);
-    const { error } = await supabaseClient.from("macokasa_records").update({ payload }).eq("id", remote);
-    if (error) showToast(`Updated on this device. Live sync needs attention.`);
+  const record = state[collection].find((item) => item.id === id);
+  const remote = record?._remoteId;
+  if (supabaseEnabled && supabaseClient && record) {
+    const { _remoteId, ...payload } = record;
+    if (remote) {
+      const { error } = await supabaseClient.from("macokasa_records").update({ payload }).eq("id", remote);
+      if (error) showToast(`Updated on this device. Live sync needs attention.`);
+    } else if (collection === "stories") {
+      const { data, error } = await supabaseClient.from("macokasa_records").insert({ collection, payload }).select("id").single();
+      if (error) {
+        showToast("Updated on this device. Live sync needs attention.");
+      } else if (data?.id) {
+        state.stories = state.stories.map((story) => story.id === id ? { ...story, _remoteId: data.id } : story);
+        persist();
+      }
+    }
   }
 }
 
 async function deleteRecord(collection, id) {
   const existing = (state[collection] || []).find((record) => record.id === id);
+  const isDefaultStory = collection === "stories" && demoState.stories.some((story) => story.id === id);
+  const tombstone = isDefaultStory && !(state.storyTombstones || []).some((record) => record.storyId === id)
+    ? { id: `story-delete-${id}`, storyId: id, createdAt: new Date().toISOString() }
+    : null;
+  if (tombstone) state.storyTombstones = [tombstone, ...(state.storyTombstones || [])];
   state[collection] = (state[collection] || []).filter((record) => record.id !== id);
   persist();
   render();
   if (supabaseEnabled && supabaseClient && existing?._remoteId) {
     const { error } = await supabaseClient.from("macokasa_records").delete().eq("id", existing._remoteId);
     if (error) showToast(`Deleted on this device. Live sync needs attention.`);
+  }
+  if (supabaseEnabled && supabaseClient && tombstone) {
+    const { error } = await supabaseClient.from("macokasa_records").insert({ collection: "storyTombstones", payload: tombstone });
+    if (error) showToast("Deleted on this device. Live sync needs attention.");
   }
 }
 
@@ -152,9 +266,9 @@ function render() {
   const visibleNavItems = showSidebar ? navItems.filter(([, , , roles]) => roles.includes(activeRole)) : [];
   app.innerHTML = `
     <div class="app-shell">
-      <header class="topbar">
+      <header class="topbar ${activeRole === "public" ? "public-topbar" : "portal-topbar"}">
         <div class="brand">
-          <img src="./assets/macokasa-logo.png" alt="MACOKASA logo" />
+          <img src="./assets/macokasa-logo-square.png" alt="MACOKASA logo" />
           <div class="brand-title">
             <strong>MACOKASA</strong>
             <span>Malawi Coalition for Kabaza Stakeholders Association</span>
@@ -162,16 +276,17 @@ function render() {
         </div>
         ${activeRole === "public" ? `
           <nav class="site-nav" aria-label="Website navigation">
-            <button type="button" data-section="public">Home</button>
-            <button type="button" data-section="catalogue">Services</button>
-            <button type="button" data-section="stories">Stories</button>
-            <button type="button" data-section="about">About us</button>
-            <button type="button" data-section="registration">Registration</button>
-            <button type="button" data-section="analytics">Impact</button>
+            ${publicNavButton("public", "Home")}
+            ${publicNavButton("catalogue", "What we do")}
+            ${publicNavButton("stories", "Stories")}
+            ${publicNavButton("about", "About")}
+            ${publicNavButton("registration", "Join")}
+            ${publicNavButton("analytics", "Impact")}
           </nav>
         ` : ""}
         <div class="top-actions">
           ${activeRole === "public" ? `
+            ${renderLiveBadge()}
             <button class="donate-header-btn" type="button" data-section="donate">Donate</button>
             <button class="portal-header-btn" type="button" data-section="portal">Portal</button>
           ` : `<button class="quiet-btn" type="button" data-role="public">Website</button>`}
@@ -193,6 +308,7 @@ function render() {
         ` : ""}
         <main class="workspace">${roleUnlocked ? renderActiveSection() : renderPortalLogin()}</main>
       </div>
+      ${activeRole === "public" ? renderPublicFooter() : ""}
       <div class="toast" role="status" aria-live="polite"></div>
     </div>
   `;
@@ -200,6 +316,50 @@ function render() {
     renderQrCodes();
     updateCardPreviewFromForm();
   });
+}
+
+function publicNavButton(section, label) {
+  return `<button class="${activeSection === section ? "active" : ""}" type="button" data-section="${section}">${label}</button>`;
+}
+
+function renderLiveBadge() {
+  const labels = {
+    live: "Live IMS",
+    connecting: "Connecting",
+    reconnecting: "Reconnecting",
+    local: "Preview data"
+  };
+  return `
+    <span class="live-badge ${escapeAttr(liveDataStatus)}" title="MACOKASA information status">
+      <i aria-hidden="true"></i>
+      <span>${escapeHtml(labels[liveDataStatus] || "IMS data")}</span>
+    </span>
+  `;
+}
+
+function renderPublicFooter() {
+  return `
+    <footer class="public-footer">
+      <div class="public-footer-brand">
+        <img src="./assets/macokasa-logo-square.png" alt="" />
+        <div>
+          <strong>MACOKASA</strong>
+          <span>Safer livelihoods. Verified operators. Accountable mobility.</span>
+        </div>
+      </div>
+      <div class="public-footer-links">
+        <button type="button" data-section="about">About MACOKASA</button>
+        <button type="button" data-section="stories">Field stories</button>
+        <button type="button" data-section="registration">Register or renew</button>
+        <a href="https://www.rosaf.org" target="_blank" rel="noreferrer">ROSAF training partner</a>
+      </div>
+      <div class="public-footer-contact">
+        <span>Report a safety issue</span>
+        <strong>1234XY</strong>
+        <small>Malawi Coalition for Kabaza Stakeholders Association</small>
+      </div>
+    </footer>
+  `;
 }
 
 function roleOption(value, label) {
@@ -296,40 +456,132 @@ function verificationPanelFromQuery() {
 }
 
 function renderHomePage() {
-  const impact = state.impact;
+  const impact = liveImpact();
+  const stories = publishedStories();
+  const featuredStory = stories[0] || {};
   const verification = verificationPanelFromQuery();
   return `
     ${verification}
     <section class="public-hero" aria-label="MACOKASA public website">
-      <div class="public-hero-media" role="img" aria-label="Pedal and motorcycle operator road safety training with stakeholders"></div>
+      <div class="public-hero-media" role="img" aria-label="Kabaza operators taking part in practical road safety work"></div>
       <div class="public-hero-content">
-        <p class="hero-kicker">Malawi Coalition for Kabaza Stakeholders Association</p>
-        <h1>Formalizing pedal and motorcycle operators for safer community mobility.</h1>
-        <p>
-          MACOKASA coordinates bicycle and motorcycle operators, owners, rank leadership, safety partners, and public institutions
-          through verified registration, digital card authentication, licensing support, and district-level impact reporting.
-        </p>
+        <p class="hero-kicker">Malawi's national Kabaza stakeholder coalition</p>
+        <h1>MACOKASA</h1>
+        <p class="hero-statement">Organising pedal and motorcycle taxi operators for safer journeys, stronger livelihoods, and public confidence.</p>
         <div class="hero-actions">
-          <button class="primary-btn" type="button" data-section="registration">Register an operator</button>
-          <button class="quiet-btn" type="button" data-section="analytics">View impact</button>
+          <button class="primary-btn" type="button" data-section="registration">${iconRegistry()} Register or renew</button>
+          <button class="quiet-btn" type="button" data-section="stories">${iconStory()} Read field stories</button>
         </div>
-        <div class="hero-proof">
-          <article><strong>${compactNumber(impact.estimatedFleet)}</strong><span>estimated transport livelihood fleet</span></article>
-          <article><strong>${compactNumber(impact.registeredOperators)}</strong><span>verified operator records</span></article>
-          <article><strong>1234XY</strong><span>toll-free safety line</span></article>
+        <div class="hero-context">
+          <span>Government engagement</span>
+          <span>Rank mobilisation</span>
+          <span>ROSAF training pathway</span>
         </div>
       </div>
     </section>
-    <section class="public-section home-theme-section">
+
+    <section class="public-notice-strip" aria-label="Current registration notices">
+      <strong>Current notice</strong>
+      <div class="notice-window">
+        <div class="notice-track">
+          <span>Membership registration and annual renewal opened 1 July 2026</span>
+          <span>Registration or renewal service fee: K5,000</span>
+          <span>Member ID fee: K10,000</span>
+          <span>MRA motorcycle registration remains open until 31 October 2026</span>
+          <span>Motorcycle registration: K77,000 big bike / K56,000 small bike</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="live-impact-band" aria-live="polite">
+      <div class="live-impact-heading">
+        <p class="eyebrow">MACOKASA IMS</p>
+        <h2>Formalisation at a glance</h2>
+        <span class="live-update-note"><i></i>${liveUpdateLabel()}</span>
+      </div>
+      <div class="live-impact-grid">
+        ${liveImpactMetric("Registered operators", compactNumber(impact.registeredOperators), "Pedal and motorcycle operator records", iconRegistry())}
+        ${liveImpactMetric("Registered motorcycles", compactNumber(impact.registeredMotorcycles), "Motorcycles connected to the formalisation effort", iconMotorcycle())}
+        ${liveImpactMetric("Subscribed owners", compactNumber(impact.subscribedOwners), "Owners linked to accountable operator management", iconCoop())}
+        ${liveImpactMetric("Districts reached", String(impact.districtsReached), "District committees supporting registration", iconChart())}
+      </div>
+    </section>
+
+    <section class="editorial-lead public-band">
+      <div class="section-heading editorial-heading">
+        <div>
+          <p class="eyebrow">From the field</p>
+          <h2>Stories that show how the sector is changing</h2>
+        </div>
+        <button class="text-link-btn" type="button" data-section="stories">View all stories ${iconArrow()}</button>
+      </div>
+      <article class="lead-story">
+        <div class="lead-story-media">${storyGallery(featuredStory, "feature")}</div>
+        <div class="lead-story-copy">
+          ${storyMetadata(featuredStory)}
+          <h3>${escapeHtml(featuredStory.title || "Working together for safer Kabaza mobility")}</h3>
+          <p>${escapeHtml(featuredStory.summary || "MACOKASA connects operators, public institutions, rank leadership, owners, and trainers around practical sector formalisation.")}</p>
+          ${featuredStory.impactLine ? `<blockquote>${escapeHtml(featuredStory.impactLine)}</blockquote>` : ""}
+          ${featuredStory.id ? `<button class="story-read-btn" type="button" data-story-open="${escapeAttr(featuredStory.id)}">Read the full story ${iconArrow()}</button>` : ""}
+        </div>
+      </article>
+    </section>
+
+    <section class="story-pillars public-band">
       <div class="section-heading">
-        <p class="eyebrow">Thematic areas</p>
-        <h2>Choose what you want to do</h2>
+        <p class="eyebrow">How change happens</p>
+        <h2>Coordination that reaches from policy rooms to Kabaza ranks</h2>
       </div>
-      <div class="home-theme-grid">
-        ${themeCard("Register operators", "Capture bicycle and motorcycle operators, sex, district, rank, membership, licence, helmet, and ID-card details.", "Public registration", "registration", iconRegistry())}
-        ${themeCard("Coordinate services", "Membership classes, card verification, owner mapping, ROSAF training support, and stakeholder coordination.", "View services", "catalogue", iconDashboard())}
-        ${themeCard("Show impact", "Track formalization progress, safety gaps, female participation, district reach, and public confidence.", "Impact analytics", "analytics", iconChart())}
+      <div class="story-pillar-grid">
+        ${storyPillar(
+          "Government engagement",
+          "One formalisation agenda",
+          "MACOKASA convenes transport authorities, police, local government, and rank leadership around registration, licensing, safer operations, and reliable sector information.",
+          "./assets/macokasa-rider-training.jpg",
+          "Government and Kabaza stakeholders coordinating safer sector operations",
+          "Government engagement"
+        )}
+        ${storyPillar(
+          "Safety mobilisation",
+          "Safer choices at every rank",
+          "District and rank committees mobilise operators around helmets, reflectors, one-passenger practice, motorcycle identification, and public accountability.",
+          "./assets/kabaza-safety-mobilisation.jpg",
+          "Kabaza operators mobilised for practical road safety awareness",
+          "Safety campaign"
+        )}
+        ${storyPillar(
+          "ROSAF partnership",
+          "Training linked to membership",
+          "The ROSAF pathway gives members access to practical riding instruction, refresher courses, and support towards formal licensing at reduced member rates.",
+          "./assets/rosaf-road-safety-practical.jpg",
+          "Kabaza rider completing a ROSAF-supported practical exercise",
+          "Training"
+        )}
       </div>
+    </section>
+
+    <section class="latest-stories public-band">
+      <div class="section-heading editorial-heading">
+        <div>
+          <p class="eyebrow">Latest reports</p>
+          <h2>People, partnerships, and progress</h2>
+        </div>
+        <span class="section-note">Published through the MACOKASA story desk</span>
+      </div>
+      <div class="story-card-grid">${storyCards(stories.slice(1, 4))}</div>
+    </section>
+
+    <section class="stakeholder-band">
+      <div>
+        <p class="eyebrow">Working in coalition</p>
+        <h2>Safer mobility needs every stakeholder at the table.</h2>
+      </div>
+      <div class="stakeholder-list">
+        ${[...affiliatedMembers, ...stakeholders].map((name) => name === "ROSAF"
+          ? `<a href="https://www.rosaf.org" target="_blank" rel="noreferrer">${escapeHtml(name)}</a>`
+          : `<span>${escapeHtml(name)}</span>`).join("")}
+      </div>
+      <button class="secondary-btn" type="button" data-section="about">Meet the coalition</button>
     </section>
   `;
 }
@@ -384,52 +636,129 @@ function renderCataloguePage() {
 
 function renderStoriesPage() {
   const stories = publishedStories();
-  const featuredStory = stories[0];
+  const selectedStory = stories.find((story) => story.id === selectedStoryId);
+  if (selectedStory) return renderStoryReader(selectedStory);
+  const categories = ["All", ...new Set(stories.map((story) => story.category).filter(Boolean))];
+  const filteredStories = storyFilter === "All" ? stories : stories.filter((story) => story.category === storyFilter);
+  const featuredStory = filteredStories[0] || stories[0] || {};
   return `
-    <section class="public-page-header stories-header">
-      <p class="eyebrow">Stories and field updates</p>
-      <h1>What MACOKASA work looks like on the ground</h1>
-      <p>Public stories focus on safety training, rank organization, stakeholder meetings, owner confidence, and operator formalization.</p>
-    </section>
-    <section class="public-section public-story-feature">
-      <div class="feature-story">
-        ${storyGallery(featuredStory || {}, "feature")}
-        <div class="feature-story-copy">
-          <span class="story-date">${compactDate(featuredStory?.createdAt || today())}</span>
-          <h3>${escapeHtml(featuredStory?.title || "Kabaza road safety work")}</h3>
-          <p>${escapeHtml(featuredStory?.summary || "MACOKASA is coordinating operators and stakeholders around safer public transport.")}</p>
-        </div>
+    <section class="stories-masthead">
+      <div>
+        <p class="eyebrow">MACOKASA field journal</p>
+        <h1>Stories of a sector organising for safety</h1>
       </div>
-      <div class="story-card-grid">${storyCards(stories.slice(1, 4))}</div>
+      <p>Follow the government dialogue, district mobilisation, practical training, and people behind Malawi's pedal and motorcycle taxi formalisation effort.</p>
     </section>
-    <section class="grid">
-      <div class="panel span-8">
-        <div class="panel-header">
-          <div><p class="eyebrow">Stakeholder meetings</p><h2>Government and public safety coordination</h2></div>
-          <span class="status">National engagement</span>
+
+    <section class="story-filter-bar" aria-label="Filter stories by theme">
+      ${categories.map((category) => `
+        <button class="${storyFilter === category ? "active" : ""}" type="button" data-story-filter="${escapeAttr(category)}">
+          ${escapeHtml(category)}
+        </button>
+      `).join("")}
+    </section>
+
+    <section class="stories-feature public-band">
+      <article class="lead-story story-page-lead">
+        <div class="lead-story-media">${storyGallery(featuredStory, "feature")}</div>
+        <div class="lead-story-copy">
+          ${storyMetadata(featuredStory)}
+          <h2>${escapeHtml(featuredStory.title || "MACOKASA field story")}</h2>
+          <p>${escapeHtml(featuredStory.summary || "New field stories will appear here as the MACOKASA story desk publishes them.")}</p>
+          ${featuredStory.impactLine ? `<blockquote>${escapeHtml(featuredStory.impactLine)}</blockquote>` : ""}
+          ${featuredStory.id ? `<button class="story-read-btn" type="button" data-story-open="${escapeAttr(featuredStory.id)}">Read full story ${iconArrow()}</button>` : ""}
         </div>
-        <div class="event-ticker">
-          <div class="event-track">
-            <span>DRTSS licence compliance clinic - Lilongwe</span>
-            <span>Police card verification briefing - Blantyre</span>
-            <span>Local government rank mapping - Mzuzu</span>
-            <span>Ministry of Transport formalization dialogue - Salima</span>
-            <span>ROSAF safe riding refresher intake - Zomba</span>
+      </article>
+    </section>
+
+    <section class="story-index public-band">
+      <div class="section-heading editorial-heading">
+        <div>
+          <p class="eyebrow">${escapeHtml(storyFilter === "All" ? "All reporting" : storyFilter)}</p>
+          <h2>${filteredStories.length} field ${filteredStories.length === 1 ? "story" : "stories"}</h2>
+        </div>
+        <span class="section-note">${liveUpdateLabel()}</span>
+      </div>
+      ${filteredStories.length
+        ? `<div class="story-card-grid story-index-grid">${storyCards(filteredStories)}</div>`
+        : `<div class="empty-story-state"><h3>No published stories in this theme yet.</h3><p>The WebAdmin can prepare and preview the next field report from the Portal.</p></div>`}
+    </section>
+
+    <section class="engagement-desk">
+      <div class="engagement-intro">
+        <p class="eyebrow">Engagement desk</p>
+        <h2>What the coalition is advancing</h2>
+        <p>These themes keep public reporting connected to practical decisions, rank-level action, and member benefits.</p>
+        <button class="quiet-btn" type="button" data-section="portal">Open story desk</button>
+      </div>
+      <div class="engagement-list">
+        <article>
+          <span>01</span>
+          <div>
+            <strong>Government and regulatory dialogue</strong>
+            <p>DRTSS licensing, Ministry of Transport policy coordination, police safety enforcement, and local-government rank planning.</p>
+          </div>
+        </article>
+        <article>
+          <span>02</span>
+          <div>
+            <strong>Rank and district mobilisation</strong>
+            <p>Committee-led registration, safety awareness, operator identification, complaints feedback, and public confidence.</p>
+          </div>
+        </article>
+        <article>
+          <span>03</span>
+          <div>
+            <strong>ROSAF practical training</strong>
+            <p>Reduced-fee training pathways, refresher riding courses, licence facilitation, and safer-rider recognition.</p>
+          </div>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+function renderStoryReader(story) {
+  const partners = storyPartners(story);
+  const paragraphs = String(story.body || story.summary || "")
+    .split(/\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+  return `
+    <article class="story-reader">
+      <header class="story-reader-header">
+        <button class="story-back-btn" type="button" data-story-close>${iconArrowLeft()} Back to stories</button>
+        ${storyMetadata(story)}
+        <h1>${escapeHtml(story.title || "MACOKASA field story")}</h1>
+        <p>${escapeHtml(story.summary || "")}</p>
+      </header>
+      <div class="story-reader-visual">${storyGallery(story, "reader")}</div>
+      <div class="story-reader-layout">
+        <aside class="story-reader-facts">
+          <span>Field note</span>
+          <dl>
+            <div><dt>Published</dt><dd>${compactDate(story.createdAt || today())}</dd></div>
+            <div><dt>Location</dt><dd>${escapeHtml(story.location || "Malawi")}</dd></div>
+            <div><dt>Theme</dt><dd>${escapeHtml(story.category || "Impact")}</dd></div>
+          </dl>
+          ${partners.length ? `
+            <div class="story-partner-list">
+              <strong>Working with</strong>
+              ${partners.map((partner) => `<span>${escapeHtml(partner)}</span>`).join("")}
+            </div>
+          ` : ""}
+        </aside>
+        <div class="story-reader-body">
+          ${story.impactLine ? `<blockquote>${escapeHtml(story.impactLine)}</blockquote>` : ""}
+          ${paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("")}
+          <div class="story-reader-callout">
+            <strong>Keep the work moving</strong>
+            <p>Registration links people, training, motorcycles, and district leadership to one accountable national information system.</p>
+            <button class="primary-btn" type="button" data-section="registration">Register or renew membership</button>
           </div>
         </div>
-        <div class="meeting-grid">
-          <div class="record-card"><strong>DRTSS road safety sessions</strong><span>Licence compliance, operator registration, roadworthiness, and safer-rank promotion.</span></div>
-          <div class="record-card"><strong>Malawi Police Service engagement</strong><span>Card verification, complaint tracking, passenger security, and enforcement support at ranks.</span></div>
-          <div class="record-card"><strong>Local government meetings</strong><span>District-level mapping, rank organization, motorcycle owner participation, and public awareness campaigns.</span></div>
-          <div class="record-card"><strong>Ministry of Transport dialogue</strong><span>National formalization, training pathways, stakeholder accountability, and sector data reporting.</span></div>
-        </div>
       </div>
-      <div class="panel span-4">
-        <h2>Web admin posting</h2>
-        <p class="footer-note">Authorized WebAdmin partners can publish stories with visuals from the Portal.</p>
-        <button class="secondary-btn" type="button" data-section="portal">Open portal access</button>
-      </div>
-    </section>
+    </article>
   `;
 }
 
@@ -553,7 +882,7 @@ function renderPartnerChooser() {
 }
 
 function renderPublicWebsite() {
-  const impact = state.impact;
+  const impact = liveImpact();
   const verification = verificationPanelFromQuery();
   const stories = publishedStories();
   const featuredStory = stories[0];
@@ -1116,7 +1445,7 @@ function renderCooperatives() {
 }
 
 function renderAnalytics() {
-  const impact = state.impact;
+  const impact = liveImpact();
   const districtRows = districtCounts();
   const planRows = planCounts();
   const sexRows = sexCounts();
@@ -1203,10 +1532,13 @@ function renderContentAdmin() {
   const latestStory = publishedStories()[0] || {};
   const editingStory = state.stories.find((story) => story.id === editingStoryId);
   const storyDraft = editingStory || {
-    title: "Road safety practice strengthens Kabaza verification",
+    title: "Rank mobilisation turns safety messages into daily practice",
     category: "Training",
     createdAt: today(),
     status: "published",
+    location: "Lilongwe",
+    partners: ["ROSAF", "MACOKASA district committee"],
+    impactLine: "Practical training gives verified membership a visible safety purpose.",
     summary: "MACOKASA and safety stakeholders are building a verified, safer Kabaza sector through training, membership, and digital card authentication.",
     body: "The story can highlight field activity, district engagement, operator participation, owner benefits, stakeholder meetings, or safety outcomes. It will appear on the public website after saving.",
     images: [defaultStoryImage]
@@ -1222,9 +1554,12 @@ function renderContentAdmin() {
         <form class="form-grid" data-form="story" data-story-composer>
           <input type="hidden" name="storyId" value="${escapeAttr(editingStory?.id || "")}" />
           <label class="field"><span>Story title</span><input class="input-control" name="title" data-story-field="title" required value="${escapeAttr(storyDraft.title)}" /></label>
-          <label class="field"><span>Category</span>${select("category", ["Training", "Stakeholder meeting", "Owner impact", "Safety campaign", "District registration"], storyDraft.category || "Training")}</label>
+          <label class="field"><span>Category</span>${select("category", ["Government engagement", "Safety campaign", "Training", "District registration", "Owner impact", "Member story"], storyDraft.category || "Training")}</label>
           <label class="field"><span>Publication date</span><input class="input-control" type="date" name="createdAt" data-story-field="createdAt" value="${escapeAttr(storyDraft.createdAt || today())}" /></label>
           <label class="field"><span>Status</span>${select("status", ["published", "draft"], storyDraft.status || "published")}</label>
+          <label class="field"><span>Location</span><input class="input-control" name="location" value="${escapeAttr(storyDraft.location || "")}" placeholder="District, city, or national" /></label>
+          <label class="field"><span>Partners</span><input class="input-control" name="partners" value="${escapeAttr(storyPartners(storyDraft).join(", "))}" placeholder="ROSAF, DRTSS, district committee" /></label>
+          <label class="field full"><span>Outcome line</span><input class="input-control" name="impactLine" value="${escapeAttr(storyDraft.impactLine || "")}" placeholder="One clear result or reason this story matters" /></label>
           <label class="field full"><span>Summary</span><textarea class="textarea-control" name="summary" data-story-field="summary" required>${escapeHtml(storyDraft.summary || "")}</textarea></label>
           <label class="field full"><span>Full story</span><textarea class="textarea-control" name="body" data-story-field="body">${escapeHtml(storyDraft.body || "")}</textarea></label>
           <label class="field full"><span>Attach visuals</span><input class="input-control" type="file" accept="image/*" multiple data-story-image /><small class="microcopy">Select more than one photo to publish a story gallery. When editing, choosing files replaces the current story photos.</small></label>
@@ -1244,9 +1579,11 @@ function renderContentAdmin() {
         <article class="admin-story-preview" data-story-preview>
           <div class="story-preview-gallery" data-story-preview-gallery>${storyGallery(storyDraft, "admin")}</div>
           <div>
-            <span data-story-preview-meta>${escapeHtml(storyDraft.category || "Impact")} - ${compactDate(storyDraft.createdAt || today())}</span>
+            <span data-story-preview-meta>${escapeHtml(storyDraft.category || "Impact")} - ${escapeHtml(storyDraft.location || "Malawi")} - ${compactDate(storyDraft.createdAt || today())}</span>
             <h3 data-story-preview-title>${escapeHtml(storyDraft.title || "Story title")}</h3>
             <p data-story-preview-summary>${escapeHtml(storyDraft.summary || "Story summary will appear here.")}</p>
+            <blockquote data-story-preview-impact>${escapeHtml(storyDraft.impactLine || "The story outcome will appear here.")}</blockquote>
+            <small data-story-preview-partners>${escapeHtml(storyPartners(storyDraft).join(" | ") || "Partners will appear here.")}</small>
           </div>
         </article>
         <div class="record-card story-admin-note">
@@ -1318,6 +1655,29 @@ function operatorForm() {
 }
 
 function handleClick(event) {
+  const storyFilterButton = event.target.closest("[data-story-filter]");
+  if (storyFilterButton) {
+    storyFilter = storyFilterButton.dataset.storyFilter || "All";
+    selectedStoryId = "";
+    activeSection = "stories";
+    render();
+    return;
+  }
+  const storyOpenButton = event.target.closest("[data-story-open]");
+  if (storyOpenButton) {
+    selectedStoryId = storyOpenButton.dataset.storyOpen || "";
+    activeSection = "stories";
+    render();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+  if (event.target.closest("[data-story-close]")) {
+    selectedStoryId = "";
+    activeSection = "stories";
+    render();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
   const jump = event.target.closest("[data-jump]")?.dataset.jump;
   if (jump) {
     activeRole = "public";
@@ -1330,12 +1690,14 @@ function handleClick(event) {
   if (section) {
     activeSection = section;
     render();
+    window.scrollTo({ top: 0, behavior: "auto" });
     return;
   }
   const role = event.target.closest("[data-role]")?.dataset.role;
   if (role) {
     activeRole = role;
     render();
+    window.scrollTo({ top: 0, behavior: "auto" });
     return;
   }
   const action = event.target.closest("[data-action]")?.dataset.action;
@@ -1689,6 +2051,9 @@ async function submitStory(values) {
   const storyRecord = {
     title: values.title,
     category: values.category,
+    location: values.location,
+    partners: String(values.partners || "").split(",").map((partner) => partner.trim()).filter(Boolean),
+    impactLine: values.impactLine,
     summary: values.summary,
     body: values.body,
     images,
@@ -1761,6 +2126,57 @@ function formValues(form) {
   return Object.fromEntries([...new FormData(form).entries()].map(([key, value]) => [key, String(value).trim()]));
 }
 
+function liveImpact() {
+  const baseline = state.impact || demoState.impact;
+  const operatorGrowth = Math.max(0, (state.operators?.length || 0) - liveCollectionBaselines.operators);
+  const motorcycleGrowth = Math.max(0, (state.motorcycles?.length || 0) - liveCollectionBaselines.motorcycles);
+  const ownerGrowth = Math.max(0, (state.owners?.length || 0) - liveCollectionBaselines.owners);
+  const representedDistricts = new Set((state.operators || []).map((operator) => operator.district).filter(Boolean)).size;
+  return {
+    ...baseline,
+    registeredOperators: Math.max(Number(baseline.registeredOperators || 0) + operatorGrowth, state.operators?.length || 0),
+    registeredMotorcycles: Math.max(Number(baseline.registeredMotorcycles || 0) + motorcycleGrowth, state.motorcycles?.length || 0),
+    subscribedOwners: Math.max(Number(baseline.subscribedOwners || 0) + ownerGrowth, state.owners?.length || 0),
+    districtsReached: Math.max(Number(baseline.districtsReached || 0), representedDistricts)
+  };
+}
+
+function liveUpdateLabel() {
+  if (liveDataStatus === "live") {
+    const time = lastLiveSyncAt
+      ? new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" }).format(lastLiveSyncAt)
+      : "now";
+    return `Live from the IMS - updated ${time}`;
+  }
+  if (liveDataStatus === "connecting" || liveDataStatus === "reconnecting") return "Refreshing live IMS records";
+  return "IMS preview dataset";
+}
+
+function liveImpactMetric(label, value, note, icon) {
+  return `
+    <article class="live-impact-metric">
+      <span class="live-impact-icon">${icon}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <h3>${escapeHtml(label)}</h3>
+      <p>${escapeHtml(note)}</p>
+    </article>
+  `;
+}
+
+function storyPillar(kicker, title, text, image, alt, category) {
+  return `
+    <article class="story-pillar">
+      <img src="${escapeAttr(image)}" alt="${escapeAttr(alt)}" />
+      <div>
+        <span>${escapeHtml(kicker)}</span>
+        <h3>${escapeHtml(title)}</h3>
+        <p>${escapeHtml(text)}</p>
+        <button class="text-link-btn" type="button" data-story-filter="${escapeAttr(category)}">Explore this work ${iconArrow()}</button>
+      </div>
+    </article>
+  `;
+}
+
 function metric(label, value, note, spanClass = "span-3") {
   return `<article class="metric ${spanClass}"><div class="metric-icon">${iconForMetric(label)}</div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note)}</small></article>`;
 }
@@ -1816,6 +2232,23 @@ function storyPrimaryImage(story) {
   return storyImages(story)[0] || defaultStoryImage;
 }
 
+function storyPartners(story) {
+  if (Array.isArray(story?.partners)) return story.partners.map((partner) => String(partner).trim()).filter(Boolean);
+  return String(story?.partners || "").split(",").map((partner) => partner.trim()).filter(Boolean);
+}
+
+function storyMetadata(story) {
+  const partners = storyPartners(story);
+  return `
+    <div class="story-metadata">
+      <span>${escapeHtml(story?.category || "Field update")}</span>
+      <time datetime="${escapeAttr(story?.createdAt || today())}">${compactDate(story?.createdAt || today())}</time>
+      <span>${escapeHtml(story?.location || "Malawi")}</span>
+      ${partners[0] ? `<span>With ${escapeHtml(partners[0])}</span>` : ""}
+    </div>
+  `;
+}
+
 function storyGallery(story, variant = "feature") {
   const images = storyImages(story);
   const title = story?.title || "MACOKASA story";
@@ -1844,38 +2277,15 @@ function storyCardMedia(story) {
 }
 
 function storyCards(rows) {
-  rows = [...rows];
-  const fallbackStories = [
-    {
-      title: "Owner confidence through verified operators",
-      category: "Owner impact",
-      summary: "Owners can map motorcycles to verified riders and manage operating agreements from the owner portal.",
-      imageData: "./assets/macokasa-rider-training.jpg",
-      createdAt: today()
-    },
-    {
-      title: "District coordination for safer ranks",
-      category: "District registration",
-      summary: "MACOKASA can use district records to guide safety campaigns, stakeholder meetings, and registration progress.",
-      imageData: "./assets/macokasa-road-safety-training.jpg",
-      createdAt: today()
-    },
-    {
-      title: "Public card checks build passenger trust",
-      category: "Safety campaign",
-      summary: "QR verification can help passengers, police, owners, and rank leadership identify active MACOKASA members.",
-      imageData: "./assets/macokasa-rider-training.jpg",
-      createdAt: today()
-    }
-  ];
-  while (rows.length < 3) rows.push(fallbackStories[rows.length % fallbackStories.length]);
-  return rows.map((story) => `
+  return [...rows].map((story) => `
     <article class="public-story-card">
       ${storyCardMedia(story)}
       <div class="public-story-card-body">
-        <span>${escapeHtml(story.category || "Impact")} - ${compactDate(story.createdAt || today())}</span>
+        ${storyMetadata(story)}
         <h3>${escapeHtml(story.title || "MACOKASA story")}</h3>
         <p>${escapeHtml(story.summary || "")}</p>
+        ${story.impactLine ? `<strong class="story-outcome">${escapeHtml(story.impactLine)}</strong>` : ""}
+        ${story.id ? `<button class="story-read-btn" type="button" data-story-open="${escapeAttr(story.id)}">Read story ${iconArrow()}</button>` : ""}
       </div>
     </article>
   `).join("");
@@ -2306,12 +2716,16 @@ function updateStoryPreview(form) {
   const metaTarget = document.querySelector("[data-story-preview-meta]");
   const titleTarget = document.querySelector("[data-story-preview-title]");
   const summaryTarget = document.querySelector("[data-story-preview-summary]");
+  const impactTarget = document.querySelector("[data-story-preview-impact]");
+  const partnersTarget = document.querySelector("[data-story-preview-partners]");
   const countTarget = document.querySelector("[data-story-preview]")?.closest(".panel")?.querySelector(".panel-header .status");
   if (galleryTarget) galleryTarget.innerHTML = storyGallery({ ...values, images }, "admin");
   if (countTarget) countTarget.textContent = `${images.length} photo${images.length === 1 ? "" : "s"}`;
-  if (metaTarget) metaTarget.textContent = `${values.category || "Impact"} - ${compactDate(values.createdAt || today())}`;
+  if (metaTarget) metaTarget.textContent = `${values.category || "Impact"} - ${values.location || "Malawi"} - ${compactDate(values.createdAt || today())}`;
   if (titleTarget) titleTarget.textContent = values.title || "Story title";
   if (summaryTarget) summaryTarget.textContent = values.summary || "Story summary will appear here.";
+  if (impactTarget) impactTarget.textContent = values.impactLine || "The story outcome will appear here.";
+  if (partnersTarget) partnersTarget.textContent = String(values.partners || "").split(",").map((partner) => partner.trim()).filter(Boolean).join(" | ") || "Partners will appear here.";
 }
 
 function readImageFile(file) {
@@ -2665,6 +3079,8 @@ function iconCoop() { return svg("M7 11a4 4 0 1 1 8 0M3 21a6 6 0 0 1 12 0M17 7h4
 function iconChart() { return svg("M4 20V4M4 20h16M8 16v-5M12 16V8M16 16v-9"); }
 function iconStory() { return svg("M4 5h16v14H4V5Zm3 3h10M7 12h10M7 16h6"); }
 function iconCloud() { return svg("M17 18H7a4 4 0 1 1 .8-7.9A5.5 5.5 0 0 1 18 9.5 4.25 4.25 0 0 1 17 18Z"); }
+function iconArrow() { return svg("M5 12h14M14 7l5 5-5 5"); }
+function iconArrowLeft() { return svg("M19 12H5M10 7l-5 5 5 5"); }
 function svg(path) {
   return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="${path}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }

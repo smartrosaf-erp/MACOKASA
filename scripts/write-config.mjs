@@ -5,7 +5,7 @@ const config = {
   supabaseUrl: process.env.SUPABASE_URL || "",
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "",
   useDemoData: !process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY,
-  publicBaseUrl: process.env.PUBLIC_BASE_URL || "http://127.0.0.1:4177",
+  publicBaseUrl: process.env.PUBLIC_BASE_URL || "__origin__",
   portalPasswords: {
     staff: process.env.MACOKASA_STAFF_PASSWORD || "Macokasa@2026",
     owner: process.env.MACOKASA_OWNER_PASSWORD || "Owner@2026",
