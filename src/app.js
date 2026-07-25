@@ -16,6 +16,8 @@ let lastLiveSyncAt = null;
 let unlockedRoles = new Set(["public"]);
 let authSession = null;
 let authProfile = null;
+let activeTenant = null;
+let tenantModules = null;
 let authChecked = false;
 let authBusy = false;
 let pendingRole = "";
@@ -160,18 +162,17 @@ function clone(value) {
 }
 
 function normalizeState(value) {
-  const legacyGateway = ["Pay", "Changu"].join("");
+  // Historical note: an earlier build scrubbed the PayChangu name out of
+  // stored state. PayChangu is the platform's decided gateway
+  // (Quick-Think plan, Section 11), so that scrubbing has been removed.
+  // Legacy strings are migrated forward to the current wording instead.
   const scrubbed = JSON.stringify(value)
-    .replace(new RegExp(`AirtelMoney via ${legacyGateway}`, "g"), "AirtelMoney")
-    .replace(new RegExp(`Mpamba via ${legacyGateway}`, "g"), "Mpamba")
-    .replace(new RegExp(`Bank Card via ${legacyGateway}`, "g"), "Bank Card")
-    .replace(new RegExp(`Pending ${legacyGateway} checkout`, "g"), "Pending payment")
-    .replace(new RegExp(`${legacyGateway} gateway`, "g"), "MACOKASA payment options")
-    .replace(/through MACOKASA payment options/g, "using MACOKASA payment options")
-    .replace(new RegExp(legacyGateway, "gi"), "MACOKASA payments");
+    .replace(/AirtelMoney via MACOKASA payments/g, "AirtelMoney")
+    .replace(/Mpamba via MACOKASA payments/g, "Mpamba")
+    .replace(/Bank Card via MACOKASA payments/g, "Bank Card")
+    .replace(/Pending MACOKASA payments checkout/g, "Pending payment");
   return JSON.parse(scrubbed);
 }
-
 function mergeStoryDefaults(stories = [], tombstones = []) {
   const existing = new Map(stories.map((story) => [story.id, story]));
   const deletedIds = new Set(tombstones.map((record) => record.storyId));
@@ -357,7 +358,9 @@ function render() {
   }
   const roleUnlocked = unlockedRoles.has(activeRole);
   const showSidebar = activeRole !== "public" && roleUnlocked;
-  const visibleNavItems = showSidebar ? navItems.filter(([, , , roles]) => roles.includes(activeRole)) : [];
+  const visibleNavItems = showSidebar
+    ? navItems.filter(([key, , , roles]) => roles.includes(activeRole) && moduleEnabled(key))
+    : [];
   app.innerHTML = `
     <div class="app-shell">
       <header class="topbar ${activeRole === "public" ? "public-topbar" : "portal-topbar"}">
@@ -400,7 +403,7 @@ function render() {
             </nav>
           </aside>
         ` : ""}
-        <main class="workspace">${roleUnlocked ? renderActiveSection() : renderPortalLogin()}</main>
+        <main class="workspace">${activeRole !== "public" && roleUnlocked ? tenantBanner() : ""}${roleUnlocked ? renderActiveSection() : renderPortalLogin()}</main>
       </div>
       ${activeRole === "public" ? renderPublicFooter() : ""}
       <div class="toast" role="status" aria-live="polite"></div>
@@ -2439,7 +2442,11 @@ async function storeMemberPhoto(memberId, photoData) {
   try {
     const photoBlob = await fetch(photoData).then((response) => response.blob());
     const version = Date.now();
-    const filePath = `${String(memberId).replace(/[^a-zA-Z0-9-_]/g, "")}/id-photo.jpg`;
+    // Tenant partitioned: <tenant_id>/<member_id>/id-photo.jpg
+    // Storage RLS asserts the first path segment matches the caller's tenant.
+    const tenantSegment = authProfile?.tenantId || activeTenant?.id || "shared";
+    const memberSegment = String(memberId).replace(/[^a-zA-Z0-9-_]/g, "");
+    const filePath = `${tenantSegment}/${memberSegment}/id-photo.jpg`;
     const { error } = await supabaseClient.storage.from("member-photos").upload(filePath, photoBlob, {
       contentType: "image/jpeg",
       cacheControl: "3600",
@@ -2533,7 +2540,7 @@ async function loadAuthProfile() {
   if (!supabaseClient || !authSession?.user?.id) return;
   const { data, error } = await supabaseClient
     .from("profiles")
-    .select("id, full_name, role, district, is_active")
+    .select("id, full_name, role, district, tenant_id, is_active")
     .eq("id", authSession.user.id)
     .maybeSingle();
   if (error) {
@@ -2546,8 +2553,67 @@ async function loadAuthProfile() {
     fullName: data.full_name || "",
     role: data.role || "member",
     district: data.district || "",
+    tenantId: data.tenant_id || "",
     isActive: data.is_active !== false
   };
+  await loadTenant();
+}
+
+/**
+ * Platform tenancy (Quick-Think plan, Section 4).
+ * The tenant governs branding, enabled modules, and whether the
+ * account may write at all. Isolation itself is enforced by RLS at
+ * the database, not here — this only drives the interface.
+ */
+async function loadTenant() {
+  activeTenant = null;
+  tenantModules = null;
+  if (!supabaseClient || !authProfile?.tenantId) return;
+  const { data, error } = await supabaseClient
+    .from("tenants")
+    .select("id, slug, name, status, currency, branding, settings")
+    .eq("id", authProfile.tenantId)
+    .maybeSingle();
+  if (error) {
+    console.error(error);
+    return;
+  }
+  activeTenant = data || null;
+
+  const { data: modules } = await supabaseClient
+    .from("tenant_modules")
+    .select("module_key, enabled")
+    .eq("tenant_id", authProfile.tenantId);
+  if (modules) {
+    tenantModules = new Set(modules.filter((row) => row.enabled).map((row) => row.module_key));
+  }
+}
+
+/** Is a module switched on for this tenant? Unknown = allow (single-tenant fallback). */
+function moduleEnabled(key) {
+  if (!tenantModules) return true;
+  return tenantModules.has(key);
+}
+
+/** Billing engine access states: active | grace | read_only | suspended. */
+function tenantCanWrite() {
+  if (!activeTenant) return true;
+  return ["active", "grace"].includes(activeTenant.status);
+}
+
+function tenantBanner() {
+  if (!activeTenant) return "";
+  const status = activeTenant.status;
+  if (status === "grace") {
+    return `<div class="tenant-banner grace" role="status"><strong>Payment due</strong><span>This workspace is in its grace period. Settle the outstanding invoice to avoid interruption.</span></div>`;
+  }
+  if (status === "read_only") {
+    return `<div class="tenant-banner readonly" role="alert"><strong>Read only</strong><span>This workspace is read-only pending payment. Records remain safe and visible, but cannot be changed.</span></div>`;
+  }
+  if (status === "suspended") {
+    return `<div class="tenant-banner suspended" role="alert"><strong>Suspended</strong><span>This workspace is suspended. Data is retained. Contact Quick-Think Solution to reactivate.</span></div>`;
+  }
+  return "";
 }
 
 function applyProfileRole() {

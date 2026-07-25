@@ -5485,3 +5485,43 @@ body.is-offline::before {
   min-width: 34px;
   text-align: center;
 }
+
+/* ============================================================
+   Platform tenancy — billing engine access states
+   (Quick-Think plan, Section 9.1)
+   ============================================================ */
+
+.tenant-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin-bottom: 18px;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  border-left: 5px solid;
+  font-size: 0.9rem;
+}
+
+.tenant-banner strong {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.tenant-banner.grace {
+  border-color: var(--gold-deep);
+  background: #fff8e6;
+  color: #6b5518;
+}
+
+.tenant-banner.readonly {
+  border-color: #d97706;
+  background: #fff1e0;
+  color: #7c4a08;
+}
+
+.tenant-banner.suspended {
+  border-color: var(--red);
+  background: #fdecec;
+  color: #8c1c1c;
+}

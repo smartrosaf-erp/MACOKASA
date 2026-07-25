@@ -201,4 +201,75 @@ test("pedal vehicles carry no helmets or tracker", () => {
   }
 });
 
+console.log("\nPlatform tenancy");
+
+import { existsSync } from "node:fs";
+
+const migrationPath = new URL("../supabase/migrations/0001_platform_tenancy.sql", import.meta.url);
+
+test("tenancy migration exists", () => {
+  assert.ok(existsSync(migrationPath), "0001_platform_tenancy.sql missing");
+});
+
+const migration = readFileSync(migrationPath, "utf8");
+
+test("tenants, domains and modules tables are created", () => {
+  assert.match(migration, /create table if not exists public\.tenants/);
+  assert.match(migration, /create table if not exists public\.tenant_domains/);
+  assert.match(migration, /create table if not exists public\.tenant_modules/);
+});
+
+test("every business table gains tenant_id", () => {
+  for (const t of ["profiles", "macokasa_records", "card_verifications", "reminder_jobs", "audit_log"]) {
+    assert.match(migration, new RegExp(`alter table public\\.${t}\\s+add column if not exists tenant_id`),
+      `${t} missing tenant_id`);
+  }
+});
+
+test("existing rows are backfilled before NOT NULL is enforced", () => {
+  const backfill = migration.indexOf("update public.macokasa_records set tenant_id");
+  const notNull = migration.indexOf("alter column tenant_id set not null");
+  assert.ok(backfill > -1 && notNull > backfill, "NOT NULL must come after backfill");
+});
+
+test("RLS policies check tenant, not role alone", () => {
+  assert.match(migration, /Tenant and role scoped read/);
+  assert.match(migration, /tenant_id = public\.current_tenant_id\(\)/);
+});
+
+test("billing engine access states gate writes", () => {
+  assert.match(migration, /tenant_can_write/);
+  assert.match(migration, /'active', 'grace', 'read_only', 'suspended'/);
+});
+
+test("storage is tenant partitioned", () => {
+  assert.match(migration, /storage\.foldername\(name\)\)\[1\] = public\.current_tenant_id\(\)::text/);
+});
+
+test("audit log records the tenant", () => {
+  assert.match(migration, /insert into public\.audit_log \(\s*tenant_id/);
+});
+
+test("client resolves tenant and gates modules", () => {
+  assert.match(app, /function loadTenant/);
+  assert.match(app, /function moduleEnabled/);
+  assert.match(app, /function tenantCanWrite/);
+});
+
+test("client surfaces billing access states", () => {
+  assert.match(app, /tenant-banner/);
+  for (const state of ["grace", "read_only", "suspended"]) {
+    assert.ok(app.includes(state), `missing ${state} handling`);
+  }
+});
+
+test("photo paths are tenant partitioned", () => {
+  assert.match(app, /\$\{tenantSegment\}\/\$\{memberSegment\}\/id-photo\.jpg/);
+});
+
+test("PayChangu scrubbing has been removed", () => {
+  assert.ok(!app.includes('["Pay", "Changu"].join'), "obfuscated gateway scrubbing still present");
+  assert.ok(!/legacyGateway/.test(app), "legacyGateway logic still present");
+});
+
 console.log(`\n${passed} assertion group(s) passed.\n`);

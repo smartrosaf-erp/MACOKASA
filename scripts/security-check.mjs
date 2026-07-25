@@ -76,6 +76,24 @@ if (existsSync(schemaPath)) {
   }
 }
 
+// --- 3b. Tenancy isolation must not regress --------------------------
+const migrationPath = resolve("supabase", "migrations", "0001_platform_tenancy.sql");
+if (existsSync(migrationPath)) {
+  const migration = readFileSync(migrationPath, "utf8");
+  // A policy that checks role but not tenant would leak across tenants.
+  const policies = migration.match(/create policy[\s\S]*?;/g) || [];
+  for (const policy of policies) {
+    const name = (policy.match(/create policy "([^"]+)"/) || [])[1] || "unnamed";
+    const onRecords = /on public\.(macokasa_records|card_verifications|reminder_jobs|audit_log)/.test(policy);
+    if (onRecords && !policy.includes("current_tenant_id")) {
+      fail("tenancy", `policy "${name}" touches a business table without a tenant check`);
+    }
+  }
+  if (!/alter column tenant_id set not null/.test(migration)) {
+    warn.push("tenancy migration does not enforce NOT NULL on tenant_id");
+  }
+}
+
 // --- 4. Secrets must not be committed --------------------------------
 if (existsSync(resolve(".env"))) {
   fail("env", ".env is present in the repository tree");
