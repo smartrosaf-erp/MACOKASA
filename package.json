@@ -10,8 +10,9 @@
     "sqlcheck": "python3 scripts/validate-sql.py",
     "security": "node scripts/security-check.mjs",
     "test": "node tests/finance.test.mjs && node tests/app.test.mjs",
-    "verify": "npm run check && npm run build && npm run security && npm test",
-    "bootcheck": "node scripts/boot-check.mjs"
+    "verify": "npm run check && npm run build && npm run security && npm test && npm run workflow",
+    "bootcheck": "node scripts/boot-check.mjs",
+    "workflow": "node workflow-check.mjs"
   },
   "devDependencies": {
     "jsdom": "^25.0.0"

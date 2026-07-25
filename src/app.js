@@ -254,6 +254,7 @@ function shell(body) {
         </main>
       </div>
     </div>
+    ${api.DEMO ? `<div class="demo-ribbon"><i></i>Demonstration data</div>` : ""}
   `;
 }
 
@@ -346,10 +347,46 @@ function signInScreen() {
         </button>
         <button class="btn btn-ghost btn-block" type="button" data-act="reset">Forgot password</button>
 
+        ${api.DEMO ? demoRoleChooser() : ""}
+
         <p class="hint" style="text-align:center">
           Access is logged and audited. There is no public self-registration.
         </p>
       </form>
+    </div>
+  `;
+}
+
+const DEMO_ROLES = [
+  ["admin@macokasa.org", "Ruth Mbewe", "Administrator", "Everything, including settings and fees"],
+  ["clerk@macokasa.org", "Patrick Mvula", "Data clerk", "Register members and take payment"],
+  ["finance@macokasa.org", "Esther Nyirenda", "Finance", "Confirm payments, verify remittances, settle"],
+  ["printing@macokasa.org", "Samuel Nyasulu", "Printing", "Work the card queue"],
+  ["operations@macokasa.org", "Daniel Kaunda", "Operations", "Approve reprints and oversee dispatch"],
+  ["billing@quickthinks.com", "Quick-Think", "Platform", "Raise settlement invoices"]
+];
+
+function demoRoleChooser() {
+  return html`
+    <div class="demo-panel">
+      <div class="demo-panel-head">
+        ${icon("info")}
+        <div>
+          <strong>Demonstration mode</strong>
+          <span>Sample data, no database. Sign in as any role to explore.</span>
+        </div>
+      </div>
+      <div class="demo-roles">
+        ${DEMO_ROLES.map(
+          ([email, name, role, note]) => html`
+            <button class="demo-role" type="button" data-demo-login="${esc(email)}">
+              <strong>${esc(role)}</strong>
+              <span>${esc(name)}</span>
+              <small>${esc(note)}</small>
+            </button>
+          `
+        ).join("")}
+      </div>
     </div>
   `;
 }
@@ -447,6 +484,22 @@ function paint(markup) {
 document.addEventListener("click", async (event) => {
   const goKey = event.target.closest("[data-go]")?.dataset.go;
   if (goKey) return go(goKey);
+
+  // Demo role buttons carry no data-act, so they must be handled
+  // before the guard below.
+  const demoEmail = event.target.closest("[data-demo-login]")?.dataset.demoLogin;
+  if (demoEmail) {
+    try {
+      await api.signIn(demoEmail, "demo");
+      applyTenantFormatting();
+      notify.ok(`Signed in as ${api.state.profile.full_name}.`);
+      current = "dashboard";
+      await route();
+    } catch (error) {
+      notify.err(error.message);
+    }
+    return;
+  }
 
   const act = event.target.closest("[data-act]")?.dataset.act;
   if (!act) return;

@@ -272,11 +272,19 @@ async function openPaymentModal(memberId, rerender) {
 async function openMemberModal(memberId, rerender) {
   const m = modal({ title: "Member", body: loading(), wide: true });
   try {
-    const [member, memberships, cards] = await Promise.all([
+    const [member, memberships, cards, allAreas, vehicles] = await Promise.all([
       api.getMember(memberId),
       api.listMemberships(memberId),
-      api.listCards({ memberId })
+      api.listCards({ memberId }),
+      api.listAreas(),
+      api.listVehicles()
     ]);
+    const area = allAreas.find((a) => a.id === member.area_id);
+    const assigned = await api.listAssignments();
+    const mine = assigned.find((a) => a.operator_member_id === member.id && a.status === "active");
+    const vehicle = mine
+      ? vehicles.find((v) => v.id === mine.vehicle_id)
+      : vehicles.find((v) => v.owner_member_id === member.id);
     const photoUrl = member.photo_path ? await api.signedPhotoUrl(member.photo_path) : "";
     const district = districts.find((d) => d.id === member.district_id);
     const pkg = packages.find((p) => p.id === member.package_id);
@@ -337,7 +345,11 @@ async function openMemberModal(memberId, rerender) {
 
         <div class="col-5">
           ${cardPair({
-            member: { ...member, _vehicle_id: "" },
+            member: {
+              ...member,
+              _vehicle_id: vehicle?.identifier || "",
+              _area_name: area?.name || ""
+            },
             card,
             packageName: pkg?.name,
             districtName: district?.name,

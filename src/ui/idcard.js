@@ -28,7 +28,7 @@ export function cardFront({ member, card, packageName, districtName, photoUrl, v
       </div>
 
       <div class="id-body">
-        <div>
+        <div class="id-photo-col">
           <div class="id-photo">
             ${photoUrl ? `<img src="${esc(photoUrl)}" alt="" />` : esc(initials(member.first_name, member.last_name))}
           </div>
@@ -45,9 +45,19 @@ export function cardFront({ member, card, packageName, districtName, photoUrl, v
             <div class="id-field"><span>District</span><strong>${esc(districtName || "—")}</strong></div>
             <div class="id-field"><span>Sex</span><strong>${esc(member.sex || "—")}</strong></div>
           </div>
+          <div class="id-pair">
+            <div class="id-field">
+              <span>${pedal ? "Bicycle ID" : "Plate"}</span>
+              <strong>${esc(member._vehicle_id || "Not recorded")}</strong>
+            </div>
+            <div class="id-field">
+              <span>Rank / area</span>
+              <strong>${esc(member._area_name || "—")}</strong>
+            </div>
+          </div>
           <div class="id-field">
-            <span>${pedal ? "Bicycle ID" : "Plate"}</span>
-            <strong>${esc(member._vehicle_id || "—")}</strong>
+            <span>${pedal ? "Safety training" : "Licence"}</span>
+            <strong>${member.has_licence ? esc(member.licence_no || member.training_ref || "Held") : "Not held"}</strong>
           </div>
         </div>
 

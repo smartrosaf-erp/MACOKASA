@@ -27,6 +27,18 @@ MACOKASA clerks, face to face.
 
 ---
 
+## See it working
+
+```bash
+npm run build && npm run dev     # http://127.0.0.1:4177/
+```
+
+With no database configured the platform starts in **demonstration
+mode**: 64 sample members across 8 districts, full finance history, and
+one-click sign-in as any role. See `docs/DEMO.md`.
+
+Screenshots of every screen are in `screenshots/`.
+
 ## Running it
 
 ```bash

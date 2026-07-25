@@ -203,7 +203,7 @@ async function preview(cardId) {
     const member = await api.getMember(card.member_id);
     const photoUrl = member.photo_path ? await api.signedPhotoUrl(member.photo_path) : "";
     m.querySelector(".modal-body").innerHTML = cardPair({
-      member,
+      member: { ...member, _area_name: row?.area || "" },
       card,
       packageName: row?.package_name,
       districtName: row?.district,
