@@ -25,7 +25,7 @@ import {
   confirmDialog,
   loading
 } from "../ui/components.js";
-import { money, date, dateTime, fullName } from "../lib/format.js";
+import { money, moneyRich, date, dateTime, fullName } from "../lib/format.js";
 import * as api from "../lib/api.js";
 
 let tab = "overview";
@@ -111,28 +111,28 @@ function overview() {
     <div class="grid" style="margin-bottom:18px">
       ${stat({
         label: "Actual revenue",
-        value: money(actual),
+        value: moneyRich(actual),
         note: "Everything collected and confirmed, 100%",
         tone: "stat-accent",
         span: 3
       })}
       ${stat({
         label: "MACOKASA available",
-        value: `<span class="pos">${money(available)}</span>`,
+        value: `<span class="pos">${moneyRich(available)}</span>`,
         note: `${mckPct}% share, less drawings`,
         tone: "stat-accent",
         span: 3
       })}
       ${stat({
         label: "Quick-Think owed",
-        value: money(qts),
+        value: moneyRich(qts),
         note: `${qtsPct}% share, less settlements paid`,
         tone: "stat-gold",
         span: 3
       })}
       ${stat({
         label: "In clerk hands",
-        value: money(custody),
+        value: moneyRich(custody),
         note: "Not yet remitted or reconciled",
         tone: custody > 0 ? "stat-red" : "",
         span: 3
@@ -160,8 +160,8 @@ function overview() {
             <span class="qts" style="width:${qtsPct}%"></span>
           </div>
           <div class="legend" style="margin-bottom:16px">
-            <span><i style="background:var(--accent)"></i>MACOKASA ${mckPct}%</span>
-            <span><i style="background:var(--brand-500)"></i>Quick-Think ${qtsPct}%</span>
+            <span><i style="background:var(--green)"></i>MACOKASA ${mckPct}%</span>
+            <span><i style="background:var(--gold)"></i>Quick-Think ${qtsPct}%</span>
           </div>
           <dl class="kv">
             <dt>Collected (actual)</dt><dd>${money(actual)}</dd>
@@ -336,14 +336,14 @@ function settlementsTab() {
     <div class="grid" style="margin-bottom:16px">
       ${stat({
         label: "Available to Quick-Think",
-        value: money(qts),
+        value: moneyRich(qts),
         note: "Only this may be requested",
         tone: "stat-gold",
         span: 4
       })}
       ${stat({
         label: "Requested, unpaid",
-        value: money(
+        value: moneyRich(
           data.settlements
             .filter((s) => ["requested", "approved"].includes(s.status))
             .reduce((t, s) => t + Number(s.amount_requested), 0)
@@ -352,7 +352,7 @@ function settlementsTab() {
       })}
       ${stat({
         label: "Settled to date",
-        value: money(data.settlements.filter((s) => s.status === "paid").reduce((t, s) => t + Number(s.amount_paid || 0), 0)),
+        value: moneyRich(data.settlements.filter((s) => s.status === "paid").reduce((t, s) => t + Number(s.amount_paid || 0), 0)),
         span: 4
       })}
     </div>

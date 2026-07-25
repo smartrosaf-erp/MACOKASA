@@ -153,8 +153,8 @@ function splitTab() {
         <span class="qts" style="width:${qts}%"></span>
       </div>
       <div class="legend" style="margin-bottom:18px">
-        <span><i style="background:var(--accent)"></i>MACOKASA ${mck}%</span>
-        <span><i style="background:var(--brand-500)"></i>Quick-Think ${qts}%</span>
+        <span><i style="background:var(--green)"></i>MACOKASA ${mck}%</span>
+        <span><i style="background:var(--gold)"></i>Quick-Think ${qts}%</span>
       </div>
 
       <div class="form-grid" data-form="split">

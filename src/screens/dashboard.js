@@ -1,7 +1,7 @@
 import { esc, html } from "../lib/dom.js";
 import { icon } from "../ui/icons.js";
 import { panel, table, stat, badge, statusBadge, typeBadge, banner, memberCell } from "../ui/components.js";
-import { money, date, compact, relativeDays } from "../lib/format.js";
+import { money, moneyRich, date, compact, relativeDays } from "../lib/format.js";
 import * as api from "../lib/api.js";
 
 let data = {};
@@ -54,7 +54,7 @@ export function render() {
         canSeeMoney && b
           ? stat({
               label: "MACOKASA available",
-              value: `<span class="pos">${money(b.macokasa_available)}</span>`,
+              value: `<span class="pos">${moneyRich(b.macokasa_available)}</span>`,
               note: "Own share, spendable",
               tone: "stat-accent",
               span: 3
@@ -65,7 +65,7 @@ export function render() {
         canSeeMoney && b
           ? stat({
               label: "In clerk hands",
-              value: money(b.clerk_custody),
+              value: moneyRich(b.clerk_custody),
               note: "Not yet reconciled",
               tone: Number(b.clerk_custody) > 0 ? "stat-red" : "",
               span: 3

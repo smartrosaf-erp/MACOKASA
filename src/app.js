@@ -311,11 +311,18 @@ function signInScreen() {
             <span>Malawi Coalition for Kabaza Stakeholders Association</span>
           </div>
         </div>
-        <h2>The national Kabaza register</h2>
+        <p class="auth-eyebrow">Membership · Cards · Fleet · Finance</p>
+        <h2>The national Kabaza register.</h2>
         <p>
-          Membership, identity cards, fleet management and finance for pedal and motorcycle taxi
-          operators across Malawi.
+          One record for every pedal and motorcycle taxi operator in Malawi — registered by clerks,
+          verified by QR, and accounted for to the last kwacha.
         </p>
+        <div class="auth-facts">
+          <div><strong>Access</strong><span>controlled</span></div>
+          <div><strong>Money</strong><span>accounted</span></div>
+          <div><strong>Cards</strong><span>printed once</span></div>
+          <div><strong>Data</strong><span>audited</span></div>
+        </div>
       </div>
 
       <form class="auth-form" data-form="signin">

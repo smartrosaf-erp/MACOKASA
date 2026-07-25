@@ -20,6 +20,19 @@ export function money(value, { withSymbol = true } = {}) {
   return withSymbol ? `${currency} ${formatted}` : formatted;
 }
 
+/**
+ * Currency for display at large sizes: the symbol is set small and
+ * muted so the numeral carries the weight, as in financial dashboards.
+ */
+export function moneyRich(value) {
+  const n = Number(value || 0);
+  const formatted = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: n % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2
+  }).format(n);
+  return `<span class="cur">${currency}</span>${formatted}`;
+}
+
 export function number(value) {
   return new Intl.NumberFormat(locale).format(Number(value || 0));
 }
