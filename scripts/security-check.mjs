@@ -60,19 +60,47 @@ if (/placeholder="123"[^>]*>\s*<\/label>/.test(app) && /CVV/i.test(app)) {
   if (cvvInput) fail("pci", "src/app.js renders a CVV input — PCI-DSS violation");
 }
 
-// --- 3. Schema must not grant anon blanket access --------------------
-const schemaPath = resolve("supabase", "schema.sql");
-if (existsSync(schemaPath)) {
-  const schema = readFileSync(schemaPath, "utf8");
-  const anonSelect = /on\s+public\.macokasa_records\s+for\s+select[\s\S]{0,120}?to\s+[^;]*\banon\b/i;
-  if (anonSelect.test(schema)) {
-    fail("rls", "schema.sql grants anon SELECT on macokasa_records");
-  }
-  if (/using\s*\(\s*true\s*\)[\s\S]{0,40}macokasa_records/i.test(schema)) {
-    warn.push("schema.sql contains a using(true) policy — verify it is intentional");
-  }
-  if (/'member-photos',\s*true/.test(schema)) {
-    fail("storage", "member-photos bucket is public — must be private");
+// --- 3. Migrations must not weaken isolation -------------------------
+import { readdirSync } from "node:fs";
+const migDir = resolve("supabase", "migrations");
+if (existsSync(migDir)) {
+  const businessTables = [
+    "members", "vehicles", "memberships", "id_cards", "payments",
+    "ledger_entries", "custody_records", "remittances", "qts_settlements",
+    "expenses", "notifications", "audit_log"
+  ];
+  for (const file of readdirSync(migDir).filter((f) => f.endsWith(".sql"))) {
+    const sql = readFileSync(resolve(migDir, file), "utf8");
+
+    // Any policy on a business table must scope by tenant.
+    for (const policy of sql.match(/create policy[\s\S]*?;/g) || []) {
+      const name = (policy.match(/create policy "([^"]+)"/) || [])[1] || "unnamed";
+      const target = (policy.match(/on public\.(\w+)/) || [])[1];
+      if (!businessTables.includes(target)) continue;
+      if (!policy.includes("current_tenant_id")) {
+        fail("tenancy", `${file}: policy "${name}" on ${target} has no tenant check`);
+      }
+      if (/to\s+[^;]*\banon\b/.test(policy) && !/card_scans/.test(policy)) {
+        fail("tenancy", `${file}: policy "${name}" grants anon access to ${target}`);
+      }
+    }
+
+    // The evidence tables must stay append-only.
+    if (/create table if not exists public\.ledger_entries/.test(sql)) {
+      if (!/revoke insert, update, delete on public\.ledger_entries/.test(sql)) {
+        fail("finance", `${file}: ledger_entries is not revoked from client roles`);
+      }
+    }
+    if (/create table if not exists public\.audit_log/.test(sql)) {
+      if (!/revoke insert, update, delete on public\.audit_log/.test(sql)) {
+        fail("audit", `${file}: audit_log is not revoked from client roles`);
+      }
+    }
+
+    // Member photos must never sit in a public bucket.
+    if (/'member-photos',\s*true/.test(sql)) {
+      fail("storage", `${file}: member-photos bucket is public`);
+    }
   }
 }
 
