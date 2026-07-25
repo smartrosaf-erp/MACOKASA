@@ -174,3 +174,39 @@ category strip on the reverse. Colours are print-exact.
 
 **Tests** — `tests/category.test.mjs`, 13 assertion groups, wired into
 `npm run verify` and CI.
+
+
+---
+
+## Change log — owner and fleet categories, 2026-07-25
+
+Extends the operator category split to the ownership side.
+
+**Data model**
+- Pedal owner plans added: Pedal Owner Basic K22,500, Pedal Owner Fleet K60,000
+  (half the motorcycle owner rates).
+- Owners carry `ownerCategory`; vehicles carry `vehicleCategory`.
+- `ownerCategoryOf()` falls back through plan category then held vehicles, so
+  legacy records without the field resolve sensibly.
+
+**Corrections**
+- Demo `bike-002` was a TVS HLX motorcycle with a motorcycle plate assigned to
+  `op-002`, who is a bicycle operator, under a motorcycle owner plan. Now a
+  pedal taxi with a bicycle ID under a pedal owner plan.
+- Owner `owner-002` was on `owner_basic`; moved to `pedal_owner_basic`.
+
+**Referential integrity**
+- `submitMotorcycle()` refuses to link a vehicle to an operator of the other
+  category, naming the conflict.
+- Owner and operator pickers are filtered by the selected vehicle type.
+- The fleet table flags any pre-existing cross-category assignment rather than
+  hiding it.
+
+**Wording** — the owner portal no longer says "motorcycle" to pedal owners.
+Role labels, metrics, tables, and public copy now read "vehicle" or the
+category-correct noun. `planAudienceLabel()` maps the retained
+`"Motorcycle Owner"` audience key to accurate display text.
+
+**Tests** — 25 assertion groups, including data-integrity checks that assert no
+demo vehicle, operator, or owner is on a record from another category. These
+would have caught the `bike-002` defect.

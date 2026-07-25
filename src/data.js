@@ -100,6 +100,7 @@ export const membershipPlans = [
     key: "owner_basic",
     name: "Owner Basic",
     audience: "Motorcycle Owner",
+    category: "Motorcycle operator",
     annualFee: 45000,
     color: "#0075bd",
     benefits: ["Owner portal", "Motorcycle mapping", "Operator agreement records", "Basic earnings and expense tracking"]
@@ -108,9 +109,28 @@ export const membershipPlans = [
     key: "owner_fleet",
     name: "Owner Fleet",
     audience: "Motorcycle Owner",
+    category: "Motorcycle operator",
     annualFee: 120000,
     color: "#111827",
     benefits: ["All Owner Basic benefits", "Multi-bike fund dashboard", "Operator behavior notifications", "Complaints feedback workflow"]
+  },
+  {
+    key: "pedal_owner_basic",
+    name: "Pedal Owner Basic",
+    audience: "Motorcycle Owner",
+    category: "Bicycle operator",
+    annualFee: 22500,
+    color: "#0aa2c0",
+    benefits: ["Owner portal", "Bicycle mapping", "Operator agreement records", "Basic earnings and expense tracking"]
+  },
+  {
+    key: "pedal_owner_fleet",
+    name: "Pedal Owner Fleet",
+    audience: "Motorcycle Owner",
+    category: "Bicycle operator",
+    annualFee: 60000,
+    color: "#05798f",
+    benefits: ["All Pedal Owner Basic benefits", "Multi-bicycle fund dashboard", "Operator behaviour notifications", "Complaints feedback workflow"]
   }
 ];
 
@@ -219,6 +239,7 @@ export const demoState = {
       phone: "+265 997 800 123",
       email: "grace.phiri@example.com",
       district: "Lilongwe",
+      ownerCategory: "Motorcycle operator",
       plan: "owner_fleet",
       expiresOn: "2027-01-30",
       status: "active"
@@ -230,7 +251,8 @@ export const demoState = {
       phone: "+265 884 610 912",
       email: "frank.staford@example.com",
       district: "Blantyre",
-      plan: "owner_basic",
+      ownerCategory: "Bicycle operator",
+      plan: "pedal_owner_basic",
       expiresOn: "2026-08-30",
       status: "active"
     }
@@ -239,6 +261,7 @@ export const demoState = {
     {
       id: "bike-001",
       ownerId: "owner-001",
+      vehicleCategory: "Motorcycle operator",
       plateNumber: "LL 8421",
       make: "Bajaj Boxer",
       trackerEligible: true,
@@ -252,19 +275,22 @@ export const demoState = {
     {
       id: "bike-002",
       ownerId: "owner-002",
-      plateNumber: "BT 3402",
-      make: "TVS HLX",
+      vehicleCategory: "Bicycle operator",
+      plateNumber: "BIC-BT-3402",
+      make: "Roadmaster pedal taxi",
       trackerEligible: false,
       trackerInstalled: false,
-      helmetCount: 1,
+      helmetCount: 0,
+      reflectorFitted: true,
       assignedOperatorId: "op-002",
       agreementType: "Monthly pay",
       monthlyTarget: 0,
-      monthlyPay: 120000
+      monthlyPay: 35000
     },
     {
       id: "bike-003",
       ownerId: "owner-001",
+      vehicleCategory: "Motorcycle operator",
       plateNumber: "MZ 7728",
       make: "Honda ACE",
       trackerEligible: true,

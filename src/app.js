@@ -27,6 +27,7 @@ let selectedStoryId = "";
 let storyFilter = "All";
 let selectedCardOperatorId = "";
 let registrationCategory = "Motorcycle operator";
+let fleetCategory = "Motorcycle operator";
 let activeCameraStream = null;
 let activeCameraForm = null;
 let cameraRequestId = 0;
@@ -697,7 +698,7 @@ function renderHomePage() {
       </div>
       <div class="live-impact-grid">
         ${liveImpactMetric("Registered operators", compactNumber(impact.registeredOperators), `${compactNumber(impact.motorcycleOperators)} motorcycle · ${compactNumber(impact.bicycleOperators)} pedal in current records`, iconRegistry())}
-        ${liveImpactMetric("Registered motorcycles", compactNumber(impact.registeredMotorcycles), "Motorcycles connected to the formalisation effort", iconMotorcycle())}
+        ${liveImpactMetric("Registered vehicles", compactNumber(impact.registeredMotorcycles), `${compactNumber(impact.mappedMotorcycles)} motorcycles · ${compactNumber(impact.mappedBicycles)} bicycles mapped`, iconMotorcycle())}
         ${liveImpactMetric("Subscribed owners", compactNumber(impact.subscribedOwners), "Owners linked to accountable operator management", iconCoop())}
         ${liveImpactMetric("Districts reached", String(impact.districtsReached), "District committees supporting registration", iconChart())}
       </div>
@@ -799,7 +800,7 @@ function renderCataloguePage() {
         <article>
           <span>${iconMotorcycle()}</span>
           <h3>Owner subscription</h3>
-          <p>Motorcycle owners subscribe, map motorcycles, find verified operators, and manage agreements from the owner portal.</p>
+          <p>Motorcycle and bicycle owners subscribe, map their vehicles, find verified operators, and manage agreements from the owner portal.</p>
         </article>
         <article>
           <span>${iconShield()}</span>
@@ -1044,7 +1045,7 @@ function renderPortalChooser() {
       <button class="portal-choice-card" type="button" data-section="partner">
         <span>${iconCoop()}</span>
         <strong>Partner portal</strong>
-        <small>Printing authority, motorcycle owners, and WebAdmin access.</small>
+        <small>Printing authority, vehicle owners, and WebAdmin access.</small>
       </button>
     </section>
   `;
@@ -1065,7 +1066,7 @@ function renderPartnerChooser() {
       </button>
       <button class="portal-choice-card" type="button" data-role="owner">
         <span>${iconMotorcycle()}</span>
-        <strong>Motorcycle owners</strong>
+        <strong>Vehicle owners</strong>
         <small>Motorcycle mapping, operator assignment, agreement, income, and expense tracking.</small>
       </button>
       <button class="portal-choice-card" type="button" data-role="webadmin">
@@ -1089,9 +1090,9 @@ function renderPublicWebsite() {
       <div class="public-hero-media" role="img" aria-label="Kabaza road safety training with operators and stakeholders"></div>
       <div class="public-hero-content">
         <p class="hero-kicker">Malawi Coalition for Kabaza Stakeholders Association</p>
-        <h1>Safer riders. Verified membership. Accountable motorcycle ownership.</h1>
+        <h1>Safer riders. Verified membership. Accountable vehicle ownership.</h1>
         <p>
-          MACOKASA coordinates Kabaza operators, motorcycle owners, rank leadership, safety partners, and public institutions
+          MACOKASA coordinates motorcycle and pedal Kabaza operators, vehicle owners, rank leadership, safety partners, and public institutions
           through national registration, digital card authentication, licensing support, and district-level impact reporting.
         </p>
         <div class="hero-actions">
@@ -1129,8 +1130,8 @@ function renderPublicWebsite() {
     </section>
     <section class="grid public-impact-grid">
       ${metric("Registered operators", compactNumber(impact.registeredOperators), "MACOKASA operator membership records", "span-4")}
-      ${metric("Registered motorcycles", compactNumber(impact.registeredMotorcycles), "Motorcycles mapped into the MACOKASA IMS", "span-4")}
-      ${metric("Subscribed owners", compactNumber(impact.subscribedOwners), "Motorcycle owners using MACOKASA IMS", "span-4")}
+      ${metric("Registered vehicles", compactNumber(impact.registeredMotorcycles), `${compactNumber(impact.mappedMotorcycles)} motorcycles and ${compactNumber(impact.mappedBicycles)} bicycles in the IMS`, "span-4")}
+      ${metric("Subscribed owners", compactNumber(impact.subscribedOwners), "Motorcycle and bicycle owners using MACOKASA IMS", "span-4")}
     </section>
     <section class="public-section public-story-feature" id="stories">
       <div class="section-heading">
@@ -1174,7 +1175,7 @@ function renderPublicWebsite() {
         <article>
           <span>${iconMotorcycle()}</span>
           <h3>Owner subscription</h3>
-          <p>Motorcycle owners subscribe, map motorcycles, find verified operators, and manage agreements from the owner portal.</p>
+          <p>Motorcycle and bicycle owners subscribe, map their vehicles, find verified operators, and manage agreements from the owner portal.</p>
         </article>
         <article>
           <span>${iconShield()}</span>
@@ -1221,7 +1222,7 @@ function renderPublicWebsite() {
         <h2>Portal access</h2>
         <div class="split-list">
           <button class="secondary-btn" type="button" data-role="staff">MACOKASA staff</button>
-          <button class="quiet-btn" type="button" data-role="owner">Motorcycle owner</button>
+          <button class="quiet-btn" type="button" data-role="owner">Vehicle owner</button>
           <button class="quiet-btn" type="button" data-role="printing">Printing authority</button>
         </div>
       </div>
@@ -1561,23 +1562,37 @@ function renderOwners() {
     <section class="grid">
       <div class="panel span-12">
         <div class="panel-header">
-          <div><p class="eyebrow">Motorcycle owner portal</p><h2>Map motorcycles, operators, agreements, earnings, and expenses</h2></div>
-          <span class="status green">${state.motorcycles.length} motorcycles</span>
+          <div><p class="eyebrow">Owner portal</p><h2>Map vehicles, operators, agreements, earnings, and expenses</h2></div>
+          <div class="fleet-counts">
+            ${categoryBadge("Motorcycle operator")}<span class="status green">${motorcyclesOnly().length}</span>
+            ${categoryBadge("Bicycle operator")}<span class="status green">${bicyclesOnly().length}</span>
+          </div>
         </div>
-        ${motorcycleTable(state.motorcycles)}
+        ${vehicleTable(state.motorcycles)}
       </div>
       <div class="panel span-5">
-        <h2>Add owner motorcycle</h2>
+        <h2>Add owner ${escapeHtml(vehicleNoun(fleetCategory))}</h2>
+        <fieldset class="field full category-chooser">
+          <legend>Vehicle type</legend>
+          <p class="microcopy">Sets the agreement defaults, the identifier format, and which operators can be assigned.</p>
+          <div class="category-options">
+            ${fleetOptionCard("Motorcycle operator", iconMotorcycle(), "Motorcycle", "Plate number, helmets, tracker eligibility.")}
+            ${fleetOptionCard("Bicycle operator", iconBicycle(), "Bicycle", "Bicycle ID and reflector condition.")}
+          </div>
+        </fieldset>
         <form class="form-grid" data-form="motorcycle">
-          <label class="field"><span>Owner</span>${ownerSelect("ownerId")}</label>
-          <label class="field"><span>Assigned operator</span>${operatorSelect("assignedOperatorId")}</label>
-          <label class="field"><span>Plate number</span><input class="input-control" name="plateNumber" required /></label>
-          <label class="field"><span>Make/model</span><input class="input-control" name="make" required value="Bajaj Boxer" /></label>
+          <input type="hidden" name="vehicleCategory" value="${escapeAttr(fleetCategory)}" />
+          <label class="field"><span>Owner</span>${ownerSelect("ownerId", fleetCategory)}</label>
+          <label class="field"><span>Assigned operator</span>${operatorSelectForCategory("assignedOperatorId", fleetCategory)}</label>
+          <label class="field"><span>${escapeHtml(categoryMeta(fleetCategory).idLabel)}</span><input class="input-control" name="plateNumber" required placeholder="${escapeAttr(isPedal(fleetCategory) ? "BIC-BT-0000" : "LL 0000")}" /></label>
+          <label class="field"><span>Make/model</span><input class="input-control" name="make" required value="${escapeAttr(isPedal(fleetCategory) ? "Roadmaster pedal taxi" : "Bajaj Boxer")}" /></label>
           <label class="field"><span>Agreement</span>${select("agreementType", ["Monthly pay", "Target based"], "Target based")}</label>
-          <label class="field"><span>Monthly target MWK</span><input class="input-control" type="number" name="monthlyTarget" value="180000" /></label>
+          <label class="field"><span>Monthly target MWK</span><input class="input-control" type="number" name="monthlyTarget" value="${isPedal(fleetCategory) ? 45000 : 180000}" /></label>
           <label class="field"><span>Monthly pay MWK</span><input class="input-control" type="number" name="monthlyPay" value="0" /></label>
-          <label class="field"><span>Helmet count</span><input class="input-control" type="number" min="0" name="helmetCount" value="2" /></label>
-          <button class="primary-btn" type="submit">Map motorcycle</button>
+          ${isPedal(fleetCategory)
+            ? `<label class="field"><span>Reflector fitted</span>${select("reflectorFitted", ["Yes", "No"], "Yes")}</label>`
+            : `<label class="field"><span>Helmet count</span><input class="input-control" type="number" min="0" name="helmetCount" value="2" /></label>`}
+          <button class="primary-btn" type="submit">Map ${escapeHtml(vehicleNoun(fleetCategory))}</button>
         </form>
       </div>
       <div class="panel span-7">
@@ -1587,17 +1602,17 @@ function renderOwners() {
           <div class="record-card"><strong>Total expenses</strong><span>${money(totals.expenses)}</span></div>
           <div class="record-card ${totals.net >= 0 ? "positive-card" : "negative-card"}"><strong>Balance</strong><span>${money(totals.net)} ${totals.net >= 0 ? "positive" : "negative"}</span></div>
         </div>
-        <label class="field full owner-filter"><span>View motorcycle performance</span>${motorcycleFilterSelect("ownerFundFilter", ownerFundFilterId)}</label>
+        <label class="field full owner-filter"><span>View vehicle performance</span>${motorcycleFilterSelect("ownerFundFilter", ownerFundFilterId)}</label>
         <form class="form-grid" data-form="fund">
           <label class="field"><span>Owner</span>${ownerSelect("ownerId")}</label>
-          <label class="field"><span>Motorcycle</span>${motorcycleSelect("motorcycleId")}</label>
+          <label class="field"><span>Vehicle</span>${motorcycleSelect("motorcycleId")}</label>
           <label class="field"><span>Transaction date</span><input class="input-control" type="date" name="createdAt" value="${today()}" required /></label>
           <label class="field"><span>Type</span>${select("type", ["income", "expense"], "income")}</label>
           <label class="field"><span>Amount MWK</span><input class="input-control" type="number" min="1" name="amount" required /></label>
           <label class="field full"><span>Note</span><input class="input-control" name="note" value="Weekly target collection" /></label>
           <button class="primary-btn" type="submit">Record owner fund entry</button>
         </form>
-        <div class="table-header" style="margin-top:16px"><h3>Progress by motorcycle</h3></div>
+        <div class="table-header" style="margin-top:16px"><h3>Progress by vehicle</h3></div>
         ${fundTable(rows)}
         <div class="table-header" style="margin-top:16px"><h3>Transactions</h3></div>
         ${fundEntryTable(fundEntries)}
@@ -1953,6 +1968,12 @@ function categoryOptionCard(value, icon, title, note, active) {
 }
 
 function handleClick(event) {
+  const fleetChoice = event.target.closest("[data-fleet-category-choice]");
+  if (fleetChoice) {
+    fleetCategory = normaliseCategory(fleetChoice.dataset.fleetCategoryChoice);
+    render();
+    return;
+  }
   const categoryChoice = event.target.closest("[data-operator-category-choice]");
   if (categoryChoice) {
     registrationCategory = normaliseCategory(categoryChoice.dataset.operatorCategoryChoice);
@@ -2609,7 +2630,7 @@ function roleLabelFor(role) {
   return (
     {
       staff: "Staff ERP",
-      owner: "Motorcycle owner",
+      owner: "Vehicle owner",
       printing: "Printing and cards",
       webadmin: "Website administrator",
       member: "Member"
@@ -2798,20 +2819,32 @@ function submitVerify(values) {
 }
 
 async function submitMotorcycle(values) {
+  const category = normaliseCategory(values.vehicleCategory);
+  const pedal = isPedal(category);
+
+  // Refuse to link a vehicle to an operator of the other category.
+  const operator = state.operators.find((item) => item.id === values.assignedOperatorId);
+  if (operator && operatorCategoryOf(operator) !== category) {
+    showToast(`${operator.fullName} is registered as a ${vehicleNoun(operatorCategoryOf(operator))} operator and cannot be assigned this ${vehicleNoun(category)}.`);
+    return;
+  }
+
   await addRecord("motorcycles", {
     id: newId("bike"),
     ownerId: values.ownerId,
+    vehicleCategory: category,
     plateNumber: values.plateNumber,
     make: values.make,
     trackerEligible: false,
     trackerInstalled: false,
-    helmetCount: numberValue(values.helmetCount),
+    helmetCount: pedal ? 0 : numberValue(values.helmetCount),
+    reflectorFitted: pedal ? values.reflectorFitted === "Yes" : false,
     assignedOperatorId: values.assignedOperatorId,
     agreementType: values.agreementType,
     monthlyTarget: numberValue(values.monthlyTarget),
     monthlyPay: numberValue(values.monthlyPay)
   });
-  showToast("Motorcycle mapped to owner and operator.");
+  showToast(`${pedal ? "Bicycle" : "Motorcycle"} mapped to owner and operator.`);
 }
 
 async function submitFund(values) {
@@ -2934,6 +2967,8 @@ function liveImpact() {
     subscribedOwners: Math.max(Number(baseline.subscribedOwners || 0) + ownerGrowth, state.owners?.length || 0),
     districtsReached: Math.max(Number(baseline.districtsReached || 0), representedDistricts),
     motorcycleOperators: (state.operators || []).filter((operator) => !isPedal(operatorCategoryOf(operator))).length,
+    mappedMotorcycles: (state.motorcycles || []).filter((bike) => !isPedal(vehicleCategoryOf(bike))).length,
+    mappedBicycles: (state.motorcycles || []).filter((bike) => isPedal(vehicleCategoryOf(bike))).length,
     bicycleOperators: (state.operators || []).filter((operator) => isPedal(operatorCategoryOf(operator))).length
   };
 }
@@ -2994,7 +3029,7 @@ function planCard(plan) {
     <article class="plan-card" style="--plan-color:${plan.color}">
       <h3>${escapeHtml(plan.name)}</h3>
       <strong>${money(plan.annualFee)} / year</strong>
-      <p class="microcopy">${escapeHtml(plan.category || plan.audience)}</p>
+      <p class="microcopy">${escapeHtml(planAudienceLabel(plan))}</p>
       <ul>${plan.benefits.map((benefit) => `<li>${escapeHtml(benefit)}</li>`).join("")}</ul>
     </article>
   `;
@@ -3290,27 +3325,76 @@ function cardTable(rows) {
   }));
 }
 
-function motorcycleTable(rows) {
-  if (!rows.length) return `<div class="empty-state">No motorcycles mapped yet.</div>`;
-  return table(["Plate", "Owner", "Operator", "Agreement", "Target/pay", "Helmets", "Tracker"], rows.map((bike) => {
-    const owner = state.owners.find((item) => item.id === bike.ownerId);
-    const operator = state.operators.find((item) => item.id === bike.assignedOperatorId);
-    return [
-      `<strong>${escapeHtml(bike.plateNumber)}</strong><br><span class="microcopy">${escapeHtml(bike.make)}</span>`,
-      owner?.fullName || "",
-      operator?.fullName || "Unassigned",
-      bike.agreementType,
-      bike.agreementType === "Target based" ? money(bike.monthlyTarget) : money(bike.monthlyPay),
-      String(bike.helmetCount),
-      bike.trackerInstalled ? statusPill("Installed", "green") : bike.trackerEligible ? statusPill("Eligible", "amber") : "No"
-    ];
-  }));
+function motorcyclesOnly() {
+  return (state.motorcycles || []).filter((bike) => !isPedal(vehicleCategoryOf(bike)));
+}
+
+function bicyclesOnly() {
+  return (state.motorcycles || []).filter((bike) => isPedal(vehicleCategoryOf(bike)));
+}
+
+function fleetOptionCard(value, icon, title, note) {
+  const selected = normaliseCategory(value) === fleetCategory;
+  return `
+    <button
+      class="category-option ${selected ? "is-selected" : ""} ${isPedal(value) ? "is-pedal" : "is-motor"}"
+      type="button"
+      data-fleet-category-choice="${escapeAttr(value)}"
+      aria-pressed="${selected}"
+    >
+      <span class="category-option-icon">${icon}</span>
+      <span class="category-option-copy"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(note)}</small></span>
+    </button>
+  `;
+}
+
+function operatorSelectForCategory(name, category) {
+  const list = operatorsForCategory(category);
+  if (!list.length) {
+    return `<select class="select-control" name="${name}"><option value="">No ${escapeHtml(vehicleNoun(category))} operators registered</option></select>`;
+  }
+  return `<select class="select-control" name="${name}">${list
+    .map((operator) => `<option value="${operator.id}">${escapeHtml(operator.fullName)} - ${escapeHtml(operator.membershipNumber)}</option>`)
+    .join("")}</select>`;
+}
+
+function vehicleTable(rows) {
+  if (!rows.length) return `<div class="empty-state">No vehicles mapped yet.</div>`;
+  const na = `<span class="microcopy na-cell">—</span>`;
+  return table(
+    ["Identifier", "Type", "Owner", "Operator", "Agreement", "Target/pay", "Safety kit", "Tracker"],
+    rows.map((bike) => {
+      const owner = state.owners.find((item) => item.id === bike.ownerId);
+      const operator = state.operators.find((item) => item.id === bike.assignedOperatorId);
+      const category = vehicleCategoryOf(bike);
+      const pedal = isPedal(category);
+      // Flag a vehicle assigned to an operator of the wrong category.
+      const mismatch = operator && operatorCategoryOf(operator) !== category;
+      return [
+        `<strong>${escapeHtml(bike.plateNumber)}</strong><br><span class="microcopy">${escapeHtml(bike.make)}</span>`,
+        categoryBadge(category),
+        owner?.fullName || "",
+        operator
+          ? `${escapeHtml(operator.fullName)}${mismatch ? ` <span class="status red" title="This operator is registered in a different category">Category mismatch</span>` : ""}`
+          : `<span class="status amber">Unassigned</span>`,
+        bike.agreementType,
+        bike.agreementType === "Target based" ? money(bike.monthlyTarget) : money(bike.monthlyPay),
+        pedal
+          ? bike.reflectorFitted
+            ? statusPill("Reflector", "green")
+            : statusPill("No reflector", "amber")
+          : `${bike.helmetCount || 0} helmet(s)`,
+        pedal ? na : bike.trackerInstalled ? statusPill("Installed", "green") : bike.trackerEligible ? statusPill("Eligible", "amber") : "No"
+      ];
+    })
+  );
 }
 
 function fundTable(rows) {
   if (!rows.length) return `<div class="empty-state">No owner fund entries yet.</div>`;
-  return table(["Motorcycle", "Owner", "Income", "Expenses", "Net progress"], rows.map((row) => [
+  return table(["Vehicle", "Type", "Owner", "Income", "Expenses", "Net progress"], rows.map((row) => [
     row.motorcycle,
+    categoryBadge(row.category),
     row.owner,
     money(row.income),
     money(row.expenses),
@@ -3585,8 +3669,14 @@ function planSelect(name, selected, audience) {
     .join("")}</select>`;
 }
 
-function ownerSelect(name) {
-  return `<select class="select-control" name="${name}">${state.owners.map((owner) => `<option value="${owner.id}">${escapeHtml(owner.fullName)}</option>`).join("")}</select>`;
+function ownerSelect(name, category) {
+  const list = category
+    ? state.owners.filter((owner) => ownerCategoryOf(owner) === normaliseCategory(category))
+    : state.owners;
+  if (!list.length) {
+    return `<select class="select-control" name="${name}" disabled><option>No ${escapeHtml(vehicleNoun(category))} owners registered</option></select>`;
+  }
+  return `<select class="select-control" name="${name}">${list.map((owner) => `<option value="${owner.id}">${escapeHtml(owner.fullName)}</option>`).join("")}</select>`;
 }
 
 function operatorSelect(name) {
@@ -3594,12 +3684,14 @@ function operatorSelect(name) {
 }
 
 function motorcycleSelect(name) {
-  return `<select class="select-control" name="${name}">${state.motorcycles.map((bike) => `<option value="${bike.id}">${escapeHtml(bike.plateNumber)} - ${escapeHtml(bike.make)}</option>`).join("")}</select>`;
+  return `<select class="select-control" name="${name}">${state.motorcycles
+    .map((bike) => `<option value="${bike.id}">${isPedal(vehicleCategoryOf(bike)) ? "Bicycle" : "Motorcycle"} · ${escapeHtml(bike.plateNumber)} - ${escapeHtml(bike.make)}</option>`)
+    .join("")}</select>`;
 }
 
 function motorcycleFilterSelect(name, selected) {
   return `<select class="select-control" name="${name}" data-owner-bike-filter>
-    <option value="all" ${selected === "all" ? "selected" : ""}>All motorcycles</option>
+    <option value="all" ${selected === "all" ? "selected" : ""}>All vehicles</option>
     ${state.motorcycles.map((bike) => `<option value="${bike.id}" ${bike.id === selected ? "selected" : ""}>${escapeHtml(bike.plateNumber)} - ${escapeHtml(bike.make)}</option>`).join("")}
   </select>`;
 }
@@ -3645,6 +3737,7 @@ function ownerFundRows(filterId = "all") {
     const owner = state.owners.find((item) => item.id === bike.ownerId);
     return {
       motorcycle: `${bike.plateNumber} - ${bike.make}`,
+      category: vehicleCategoryOf(bike),
       owner: owner?.fullName || "",
       income,
       expenses,
@@ -3832,7 +3925,7 @@ function verifyCardToken(token) {
 function activeRoleLabel() {
   return {
     public: "Website",
-    owner: "Motorcycle owner",
+    owner: "Vehicle owner",
     staff: "MACOKASA staff",
     printing: "Printing authority",
     webadmin: "WebAdmin"
@@ -4122,4 +4215,60 @@ function categoryBadge(category) {
 
 function iconBicycle() {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.5" cy="17" r="3.5"/><circle cx="18.5" cy="17" r="3.5"/><path d="M5.5 17 9 8h5"/><path d="m12 17 3.5-9"/><path d="M9.5 8h5.5l3.5 9"/><path d="M14.5 5.5h2.5"/></svg>`;
+}
+
+/* ---- Owner and vehicle category helpers ---- */
+
+function ownerCategoryOf(owner) {
+  // Fall back to the plan's category, then to the vehicles they hold.
+  if (owner?.ownerCategory) return normaliseCategory(owner.ownerCategory);
+  const plan = planByKey(owner?.plan);
+  if (plan?.category) return normaliseCategory(plan.category);
+  const fleet = (state.vehicles || state.motorcycles || []).filter((item) => item.ownerId === owner?.id);
+  if (fleet.length && fleet.every((item) => isPedal(vehicleCategoryOf(item)))) return "Bicycle operator";
+  return "Motorcycle operator";
+}
+
+function vehicleCategoryOf(vehicle) {
+  return normaliseCategory(vehicle?.vehicleCategory);
+}
+
+/** Vehicle-facing wording so pedal owners never read "motorcycle". */
+function vehicleNoun(category, plural = false) {
+  const pedal = isPedal(category);
+  if (plural) return pedal ? "bicycles" : "motorcycles";
+  return pedal ? "bicycle" : "motorcycle";
+}
+
+function ownerPlanSelect(name, category, selected) {
+  const wanted = normaliseCategory(category);
+  const plans = membershipPlans.filter(
+    (plan) => plan.audience === "Motorcycle Owner" && normaliseCategory(plan.category) === wanted
+  );
+  const list = plans.length ? plans : membershipPlans.filter((plan) => plan.audience === "Motorcycle Owner");
+  const chosen = list.some((plan) => plan.key === selected) ? selected : list[0]?.key;
+  return `<select class="select-control" name="${name}">${list
+    .map(
+      (plan) =>
+        `<option value="${plan.key}" ${plan.key === chosen ? "selected" : ""}>${escapeHtml(plan.name)} - ${money(plan.annualFee)}</option>`
+    )
+    .join("")}</select>`;
+}
+
+/** Operators eligible to be assigned a given vehicle. */
+function operatorsForCategory(category) {
+  const wanted = normaliseCategory(category);
+  return (state.operators || []).filter((operator) => operatorCategoryOf(operator) === wanted);
+}
+
+/**
+ * The plan `audience` key "Motorcycle Owner" is retained for data
+ * compatibility, but pedal owners must never see it. Render an accurate
+ * label derived from the plan's category.
+ */
+function planAudienceLabel(plan) {
+  const pedal = isPedal(plan?.category);
+  if (plan?.audience === "Motorcycle Owner") return pedal ? "Bicycle owner" : "Motorcycle owner";
+  if (plan?.audience === "Operator") return pedal ? "Pedal operator" : "Motorcycle operator";
+  return plan?.audience || "";
 }

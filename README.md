@@ -87,6 +87,19 @@ Membership plans are constrained to the operator's category at both
 registration and card design — a pedal operator cannot be placed on a
 motorcycle plan.
 
+The same split applies to owners and vehicles:
+
+| | Motorcycle owner | Bicycle owner |
+|---|---|---|
+| Plans | Owner Basic K45,000 / Fleet K120,000 | Pedal Owner Basic K22,500 / Fleet K60,000 |
+| Vehicle record | Plate, helmet count, tracker eligibility | Bicycle ID, reflector condition |
+| Default target | K180,000/month | K45,000/month |
+
+A vehicle cannot be assigned to an operator of the other category — the form
+refuses it and the fleet table flags any legacy mismatch. The plan `audience`
+key `"Motorcycle Owner"` is retained for data compatibility but is never shown
+to a pedal owner; `planAudienceLabel()` renders the correct wording.
+
 To add a category, extend `OPERATOR_CATEGORIES` in `src/app.js` and add plans
 with a matching `category` field in `src/data.js`.
 

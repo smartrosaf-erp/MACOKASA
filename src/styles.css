@@ -5472,3 +5472,16 @@ body.is-offline::before {
     padding: 5px 42px 5px 16px;
   }
 }
+
+/* Owner portal fleet counts */
+.fleet-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.fleet-counts .status {
+  min-width: 34px;
+  text-align: center;
+}
