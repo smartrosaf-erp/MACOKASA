@@ -4,3 +4,7 @@ node_modules/
 .DS_Store
 dist/
 *.log
+
+# Generated build output
+public/config.js
+public/src/

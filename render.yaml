@@ -5,10 +5,65 @@ services:
     buildCommand: node scripts/write-config.mjs
     staticPublishPath: public
     pullRequestPreviewsEnabled: true
+
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        # 'unsafe-inline' for style-src is required because the app sets
+        # inline style attributes when rendering card previews.
+        value: >-
+          default-src 'self';
+          script-src 'self' https://cdn.jsdelivr.net;
+          style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+          font-src 'self' https://fonts.gstatic.com;
+          img-src 'self' data: blob: https://*.supabase.co;
+          media-src 'self' blob:;
+          connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net;
+          frame-ancestors 'none';
+          base-uri 'self';
+          form-action 'self';
+          object-src 'none';
+          upgrade-insecure-requests
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        # Camera is required for member ID capture; everything else denied.
+        value: camera=(self), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=63072000; includeSubDomains; preload
+      - path: /*
+        name: Cross-Origin-Opener-Policy
+        value: same-origin
+      - path: /config.js
+        name: Cache-Control
+        value: no-store, max-age=0
+
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
     envVars:
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
       - key: PUBLIC_BASE_URL
+        sync: false
+      - key: MACOKASA_CONTACT_EMAIL
+        sync: false
+      - key: MACOKASA_CONTACT_PHONE
+        sync: false
+      - key: MACOKASA_CONTACT_ADDRESS
+        sync: false
+      - key: MACOKASA_SAFETY_LINE
         sync: false

@@ -1,57 +1,108 @@
 # MACOKASA Kabaza Management System
 
-Administrator handoff for the MACOKASA public website, staff ERP, motorcycle owner portal, printing/card portal, operator database, subscriptions, payments, QR cards, safety compliance, cooperative loans, and impact analytics.
+Public website and management platform for the Malawi Coalition for Kabaza
+Stakeholders Association — operator registration, membership and renewals,
+QR identity cards, payments and finance, safety compliance, cooperative loans,
+and impact reporting.
 
-## Local Test
+---
 
-```powershell
-cd "C:\Users\Mada\OneDrive\Documents\GitHub\MACOKASA"
-node scripts/write-config.mjs
-node scripts/dev-server.mjs
+## Architecture
+
+| Layer | Technology |
+|---|---|
+| Frontend | Vanilla ES modules, no framework, no bundler |
+| Styling | Single CSS file with a design-token system |
+| Data | Supabase (Postgres + Realtime + Storage + Auth) |
+| Offline | `localStorage` working copy, synced when online |
+| Hosting | Render static site |
+
+**Source of truth is `src/`.** The build copies `src/` into `public/src/` and
+generates `public/config.js`. Both are gitignored — never edit files under
+`public/src/`, your changes will be overwritten on the next build.
+
+---
+
+## Local development
+
+```bash
+npm run build     # generates public/config.js and copies src -> public/src
+npm run dev       # serves http://127.0.0.1:4177/
+npm run check     # syntax validation
 ```
 
-Open `http://127.0.0.1:4177/`.
+Without `SUPABASE_URL` and `SUPABASE_ANON_KEY` the app runs on demonstration
+data and displays a banner saying so. Portal sign-in is disabled in that mode.
 
-Default local portal passwords:
+To develop against a real project, create `.env` from `.env.example` and export
+the variables before running the build.
 
-- Staff ERP: `Macokasa@2026`
-- Motorcycle owner portal: `Owner@2026`
-- Printing portal: `Print@2026`
+Camera capture for member photos requires `localhost` or HTTPS.
 
-## Render Static Site
+---
 
-1. Push this folder to a GitHub repository named `MACOKASA`.
-2. In Render, create a new Static Site from that GitHub repository.
-3. Use branch `main`.
-4. Set build command to `npm run build`.
-5. Set publish directory to `public`.
-6. Add the environment variables in `.env.example`.
+## Security model
 
-The included `render.yaml` also describes the Render static site settings.
+Read this before changing anything that touches data.
 
-## Supabase
+- **Authentication is Supabase Auth.** Individual accounts, email + password.
+  There are no shared passwords. The prototype's client-side password gate was
+  removed because `public/config.js` is world-readable.
+- **Authorisation is row level security** keyed on `profiles.role`.
+  Roles: `staff`, `owner`, `printing`, `webadmin`, `member`.
+  Anonymous visitors can read nothing and may only insert QR scan logs.
+- **Roles are assigned in SQL only**, never from the browser.
+- **Member photographs live in a private bucket.** Records store a
+  `storage:member-photos/<path>` reference; the client mints a 5-minute signed
+  URL at render time.
+- **Every record mutation is written to `audit_log`** with the acting user and
+  before/after snapshots. Financial records cannot be deleted by anyone.
+- **`public/config.js` is public.** Never add a secret to
+  `scripts/write-config.mjs`. The build warns if legacy password variables are
+  detected in the environment.
 
-1. Create a Supabase project.
-2. Run `supabase/schema.sql` in the SQL editor. It is safe to rerun after updates and creates the `member-photos` storage bucket.
-3. Optionally run `supabase/seed.sql`.
-4. Add `SUPABASE_URL` and `SUPABASE_ANON_KEY` to Render.
-5. Do not add `SUPABASE_SERVICE_ROLE_KEY` to this Render static site.
+---
+
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| `AUDIT.md` | Production readiness audit — open issues by severity |
+| `docs/DEPLOYMENT.md` | Step-by-step production runbook and verification checklist |
+| `docs/PAYMENTS.md` | Payment integration contract and PCI constraints |
+| `supabase/schema.sql` | Database schema, RLS policies, audit triggers |
+
+---
+
+## Deployment
+
+See **`docs/DEPLOYMENT.md`**. Summary:
+
+1. Run `supabase/schema.sql` in the Supabase SQL editor.
+2. Create the first staff user and assign the role in SQL.
+3. Deploy to Render from `main`, build `npm run build`, publish `public`.
+4. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `PUBLIC_BASE_URL`.
+5. Delete any legacy `MACOKASA_*_PASSWORD` variables.
+6. Work through the post-deploy verification checklist.
+
+---
 
 ## Operations
 
-- Membership reminders run from the ERP Operations Control screen and record dispatch logs for Email, WhatsApp, and SMS channels.
-- Cash payments require collector name and remain unreconciled until marked deposited.
-- Replacement, upgrade, or downgrade card issuance invalidates the old QR token and queues a new card.
-- Operator registration requires a face photo, supports live camera capture or file upload, and assigns the saved portrait to the member's first ID-card print record.
-- Donation and subscription screens support bank card, AirtelMoney, Mpamba, EFT, and cash recording with finance reconciliation.
-- The card preview updates live when the operator name, membership class, district, area, sex, or photo changes.
+- Membership reminders are dispatched from the ERP Operations Control screen and
+  logged per channel. **Providers are not yet contracted** — no real messages send.
+- Cash payments require a collector name and stay unreconciled until deposited.
+- Replacing, upgrading or downgrading a card invalidates the previous QR token.
+- Operator registration requires a face photo via live capture or upload.
 
-Camera capture works on `localhost` during testing and on HTTPS after deployment. The browser asks the registrar for camera permission when **Open camera** is selected.
+---
 
-## Production Hardening
+## Known limitations
 
-- Replace shared review passwords with per-user authentication and role permissions.
-- Configure approved SMS, WhatsApp, and email providers before sending real messages.
-- Tighten Supabase RLS before entering private member data.
-- Store card print files and member photos in private storage with access controls.
-- Keep all service-role tokens out of Git.
+Tracked in `AUDIT.md`. The significant ones:
+
+- Bank card payments disabled pending a licensed processor.
+- SMS / WhatsApp / email delivery not contracted.
+- Some organisation contact details are still placeholders.
+- Legal pages require review by a Malawian legal advisor.
+- No automated test suite yet.

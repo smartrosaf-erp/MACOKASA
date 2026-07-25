@@ -14,6 +14,10 @@ let realtimeChannel = null;
 let liveDataStatus = config.useDemoData ? "local" : "connecting";
 let lastLiveSyncAt = null;
 let unlockedRoles = new Set(["public"]);
+let authSession = null;
+let authProfile = null;
+let authChecked = false;
+let authBusy = false;
 let pendingRole = "";
 let ownerFundFilterId = "all";
 let donationChoice = { method: "card", amount: "50000" };
@@ -51,18 +55,82 @@ const navItems = [
   ["cooperatives", "Cooperative loans", iconCoop, ["staff"]],
   ["analytics", "Impact analytics", iconChart, ["public"]],
   ["content", "Website content", iconStory, ["staff", "webadmin"]],
-  ["operations", "Operations control", iconCloud, ["staff"]]
+  ["operations", "Operations control", iconCloud, ["staff"]],
+  ["privacy", "Privacy notice", iconShield, ["public"]],
+  ["terms", "Terms of use", iconShield, ["public"]]
 ];
 
 init();
 
 function init() {
-  render();
+  installErrorBoundary();
+  installConnectivityWatch();
+  safely(render);
   void connectSupabase();
-  document.addEventListener("click", handleClick);
-  document.addEventListener("change", handleChange);
-  document.addEventListener("input", handleInput);
-  document.addEventListener("submit", handleSubmit);
+  document.addEventListener("click", (event) => safely(() => handleClick(event)));
+  document.addEventListener("change", (event) => safely(() => handleChange(event)));
+  document.addEventListener("input", (event) => safely(() => handleInput(event)));
+  document.addEventListener("submit", (event) => safely(() => handleSubmit(event)));
+}
+
+/* ---- Resilience (P1-5, P1-6) ---- */
+
+let lastGoodRender = "";
+
+function safely(fn) {
+  try {
+    return fn();
+  } catch (error) {
+    reportFatal(error);
+    return undefined;
+  }
+}
+
+function installErrorBoundary() {
+  window.addEventListener("error", (event) => reportFatal(event.error || event.message));
+  window.addEventListener("unhandledrejection", (event) => reportFatal(event.reason));
+}
+
+function reportFatal(error) {
+  console.error("[MACOKASA]", error);
+  // If the app never painted, show a recovery screen rather than a blank page.
+  if (!app || app.innerHTML.trim().length > 0) {
+    showToast("Something went wrong. The last working view has been kept.");
+    return;
+  }
+  app.innerHTML = `
+    <div class="fatal-screen" role="alert">
+      <img src="./assets/macokasa-logo-square.png" alt="MACOKASA" />
+      <h1>We hit an unexpected problem</h1>
+      <p>The MACOKASA platform could not finish loading. Your saved records on this device have not been changed.</p>
+      <div class="fatal-actions">
+        <button class="primary-btn" type="button" onclick="window.location.reload()">Reload the page</button>
+        <a class="quiet-btn" href="./">Return to the website</a>
+      </div>
+      <details>
+        <summary>Technical detail for support</summary>
+        <pre>${escapeHtml(String(error?.stack || error || "Unknown error")).slice(0, 900)}</pre>
+      </details>
+    </div>
+  `;
+}
+
+function installConnectivityWatch() {
+  const sync = () => {
+    const offline = !navigator.onLine;
+    document.body.classList.toggle("is-offline", offline);
+    if (offline) {
+      liveDataStatus = "local";
+      showToast("You are offline. Changes are saved on this device.");
+    } else if (supabaseEnabled) {
+      liveDataStatus = "live";
+    }
+    const badge = document.querySelector(".live-badge");
+    if (badge) badge.className = `live-badge ${liveDataStatus}`;
+  };
+  window.addEventListener("online", sync);
+  window.addEventListener("offline", sync);
+  if (!navigator.onLine) sync();
 }
 
 function loadState() {
@@ -119,11 +187,29 @@ function persist() {
 async function connectSupabase() {
   if (!config.supabaseUrl || !config.supabaseAnonKey || config.useDemoData) {
     liveDataStatus = "local";
+    authChecked = true;
     return;
   }
   try {
     const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
-    supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey);
+    supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    });
+    supabaseEnabled = true;
+
+    // Restore any existing signed-in session before requesting records.
+    await restoreSession();
+    render();
+
+    // Row level security means anonymous visitors read nothing here.
+    // That is intentional: the public website runs on published content only.
+    if (!authProfile?.isActive) {
+      liveDataStatus = "live";
+      lastLiveSyncAt = new Date();
+      render();
+      return;
+    }
+
     const { data, error } = await supabaseClient.from("macokasa_records").select("*").order("created_at", { ascending: true });
     if (error) throw error;
     const grouped = {};
@@ -141,7 +227,6 @@ async function connectSupabase() {
       motorcycles: state.motorcycles?.length || 0,
       owners: state.owners?.length || 0
     };
-    supabaseEnabled = true;
     liveDataStatus = "live";
     lastLiveSyncAt = new Date();
     subscribeToRealtime();
@@ -150,6 +235,8 @@ async function connectSupabase() {
   } catch (error) {
     console.error(error);
     liveDataStatus = "local";
+    authChecked = true;
+    render();
     showToast("Records are available on this device.");
   }
 }
@@ -321,6 +408,7 @@ function render() {
     renderQrCodes();
     updateCardPreviewFromForm();
     enhanceMotion();
+    void hydrateMemberPhotos();
   });
 }
 
@@ -407,8 +495,13 @@ function renderPublicFooter() {
       </div>
       <div class="public-footer-contact">
         <span>Report a safety issue</span>
-        <strong>1234XY</strong>
+        <strong>${escapeHtml(orgDetail("safetyLine", "1234XY"))}</strong>
         <small>Malawi Coalition for Kabaza Stakeholders Association</small>
+      </div>
+      <div class="public-footer-legal">
+        <button type="button" data-section="privacy">Privacy notice</button>
+        <button type="button" data-section="terms">Terms of use</button>
+        <span>&copy; ${new Date().getFullYear()} MACOKASA. All rights reserved.</span>
       </div>
     </footer>
   `;
@@ -438,12 +531,50 @@ function renderActiveSection() {
     cooperatives: renderCooperatives,
     analytics: renderAnalytics,
     content: renderContentAdmin,
-    operations: renderOperations
+    operations: renderOperations,
+    privacy: renderPrivacyPage,
+    terms: renderTermsPage
   };
   return (sections[activeSection] || renderHomePage)();
 }
 
 function renderPortalLogin() {
+  if (!authChecked) {
+    return `
+      <section class="grid">
+        <div class="login-panel span-7">
+          <div class="form-header">
+            <div><p class="eyebrow">Secure access</p><h2>Checking your session</h2></div>
+          </div>
+          <p class="microcopy">Contacting the MACOKASA authentication service…</p>
+        </div>
+      </section>
+    `;
+  }
+
+  if (!supabaseEnabled) {
+    return `
+      <section class="grid">
+        <div class="login-panel span-7">
+          <div class="form-header">
+            <div>
+              <p class="eyebrow">Secure access</p>
+              <h2>${escapeHtml(activeRoleLabel())} portal</h2>
+            </div>
+            <span class="status red">Unavailable</span>
+          </div>
+          <div class="secure-note">
+            <strong>Portals require a live MACOKASA database connection.</strong>
+            <p>This build is running on local preview data, so sign-in is disabled. Configure <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> to enable staff, owner, printing, and web administration access.</p>
+          </div>
+          <button class="quiet-btn" type="button" data-role="public">Return to website</button>
+        </div>
+      </section>
+    `;
+  }
+
+  const signedInWrongRole = authSession && authProfile && authProfile.role !== activeRole;
+
   return `
     <section class="grid">
       <div class="login-panel span-7">
@@ -452,13 +583,24 @@ function renderPortalLogin() {
             <p class="eyebrow">Secure access</p>
             <h2>${escapeHtml(activeRoleLabel())} portal</h2>
           </div>
-          <span class="status amber">Password required</span>
+          <span class="status amber">Sign in required</span>
         </div>
-        <form class="form-grid" data-form="portal-login">
-          <label class="field full"><span>Password</span><input class="input-control" type="password" name="password" autocomplete="current-password" required /></label>
-          <button class="primary-btn" type="submit">Enter portal</button>
-          <button class="quiet-btn" type="button" data-role="public">Return to website</button>
-        </form>
+        ${signedInWrongRole ? `
+          <div class="secure-note">
+            <strong>Signed in as ${escapeHtml(authProfile.fullName || authSession.user?.email || "user")}.</strong>
+            <p>Your account holds the <b>${escapeHtml(roleLabelFor(authProfile.role))}</b> role, which does not grant access to the ${escapeHtml(activeRoleLabel())} portal. Contact a MACOKASA administrator if this is wrong.</p>
+          </div>
+          <button class="quiet-btn" type="button" data-action="logout">Sign out</button>
+        ` : `
+          <form class="form-grid" data-form="portal-login" autocomplete="on">
+            <label class="field full"><span>Work email</span><input class="input-control" type="email" name="email" autocomplete="username" required autocapitalize="none" spellcheck="false" /></label>
+            <label class="field full"><span>Password</span><input class="input-control" type="password" name="password" autocomplete="current-password" required minlength="8" /></label>
+            <button class="primary-btn" type="submit" ${authBusy ? "disabled" : ""}>${authBusy ? "Signing in…" : "Sign in"}</button>
+            <button class="quiet-btn" type="button" data-action="reset-password">Forgot password</button>
+            <button class="quiet-btn" type="button" data-role="public">Return to website</button>
+          </form>
+          <p class="microcopy">Accounts are issued by MACOKASA administrators. Access is logged and audited.</p>
+        `}
       </div>
       <div class="panel span-5">
         <h2>MACOKASA digital membership platform</h2>
@@ -514,6 +656,7 @@ function renderHomePage() {
   const verification = verificationPanelFromQuery();
   return `
     ${verification}
+    ${demoDataNotice()}
     <section class="public-hero" aria-label="MACOKASA public website">
       <div class="public-hero-media" role="img" aria-label="Kabaza operators taking part in practical road safety work"></div>
       <div class="public-hero-content">
@@ -940,6 +1083,7 @@ function renderPublicWebsite() {
   const featuredStory = stories[0];
   return `
     ${verification}
+    ${demoDataNotice()}
     <section class="public-hero" aria-label="MACOKASA public website">
       <div class="public-hero-media" role="img" aria-label="Kabaza road safety training with operators and stakeholders"></div>
       <div class="public-hero-content">
@@ -1869,9 +2013,12 @@ function handleClick(event) {
     return;
   }
   if (action === "logout") {
-    unlockedRoles.delete(activeRole);
-    render();
-    showToast("Portal locked.");
+    void signOut();
+    return;
+  }
+  if (action === "reset-password") {
+    void requestPasswordReset();
+    return;
   }
   if (action === "run-reminders") runReminderAutomation();
   if (action === "reconcile-sample") reconcileCashPayments();
@@ -1941,7 +2088,6 @@ function handleInput(event) {
     const submit = widget?.querySelector('button[type="submit"]');
     if (submit) submit.textContent = `${context === "donation" ? "Record donation" : "Record payment"} ${money(paymentStateFor(context).amount)}`;
   }
-  if (event.target.matches("[data-card-field]")) updatePaymentCardPreview(event.target.closest("[data-payment-widget]"));
 }
 
 async function startMemberCamera(form) {
@@ -2094,7 +2240,7 @@ async function replaceMemberPhoto(operatorId, file) {
     const storedPhoto = await storeMemberPhoto(operatorId, photoData);
     await updateRecord("operators", operatorId, {
       photoData: storedPhoto,
-      photoUrl: storedPhoto.startsWith("http") ? storedPhoto : "",
+      photoUrl: /^(https?:|storage:)/.test(storedPhoto) ? storedPhoto : "",
       photoCapturedAt: new Date().toISOString()
     });
     showToast("The saved member photo and ID preview were updated.");
@@ -2139,6 +2285,69 @@ function drawPortraitImage(source, sourceWidth, sourceHeight, canvas) {
   context.drawImage(source, sourceX, sourceY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
 }
 
+/**
+ * Member photos live in a PRIVATE bucket. Records store a reference of the
+ * form `storage:member-photos/<path>`. This resolves those references to
+ * signed URLs valid for a short window, and caches them for the page life.
+ */
+const signedPhotoCache = new Map();
+
+function isStorageRef(value) {
+  return typeof value === "string" && value.startsWith("storage:");
+}
+
+function memberPhotoSrc(operator) {
+  const ref = operator?.photoUrl || operator?.photoData || "";
+  if (!ref) return "./assets/member-photo-placeholder.png";
+  if (isStorageRef(ref)) {
+    return signedPhotoCache.get(ref) || "./assets/member-photo-placeholder.png";
+  }
+  return ref;
+}
+
+async function resolveSignedPhoto(ref) {
+  if (signedPhotoCache.has(ref)) return signedPhotoCache.get(ref);
+  if (!supabaseClient || !isStorageRef(ref)) return "";
+  const withoutScheme = ref.slice("storage:".length).split("?")[0];
+  const [bucket, ...rest] = withoutScheme.split("/");
+  const objectPath = rest.join("/");
+  try {
+    const { data, error } = await supabaseClient.storage.from(bucket).createSignedUrl(objectPath, 300);
+    if (error) throw error;
+    if (data?.signedUrl) {
+      signedPhotoCache.set(ref, data.signedUrl);
+      // Expire slightly before the signed URL does.
+      window.setTimeout(() => signedPhotoCache.delete(ref), 270000);
+      return data.signedUrl;
+    }
+  } catch (error) {
+    console.error(error);
+  }
+  return "";
+}
+
+async function hydrateMemberPhotos() {
+  if (!supabaseClient) return;
+  const nodes = document.querySelectorAll("[data-photo-ref]");
+  if (!nodes.length) return;
+  const refs = [...new Set([...nodes].map((node) => node.dataset.photoRef).filter(isStorageRef))];
+  const resolved = await Promise.all(refs.map((ref) => resolveSignedPhoto(ref)));
+  const map = new Map(refs.map((ref, index) => [ref, resolved[index]]));
+  nodes.forEach((node) => {
+    const url = map.get(node.dataset.photoRef);
+    if (url) node.src = url;
+  });
+
+  const bgNodes = document.querySelectorAll("[data-photo-bg-ref]");
+  const bgRefs = [...new Set([...bgNodes].map((node) => node.dataset.photoBgRef).filter(isStorageRef))];
+  const bgResolved = await Promise.all(bgRefs.map((ref) => resolveSignedPhoto(ref)));
+  const bgMap = new Map(bgRefs.map((ref, index) => [ref, bgResolved[index]]));
+  bgNodes.forEach((node) => {
+    const url = bgMap.get(node.dataset.photoBgRef);
+    if (url) node.style.backgroundImage = `url('${url}')`;
+  });
+}
+
 async function storeMemberPhoto(memberId, photoData) {
   if (!supabaseEnabled || !supabaseClient || !photoData.startsWith("data:")) return photoData;
   try {
@@ -2151,8 +2360,9 @@ async function storeMemberPhoto(memberId, photoData) {
       upsert: true
     });
     if (error) throw error;
-    const { data } = supabaseClient.storage.from("member-photos").getPublicUrl(filePath);
-    return data?.publicUrl ? `${data.publicUrl}?v=${version}` : photoData;
+    // The member-photos bucket is PRIVATE. We store the object path, not a
+    // public URL, and mint a short-lived signed URL only when displaying it.
+    return `storage:member-photos/${filePath}?v=${version}`;
   } catch (error) {
     console.error(error);
     return photoData;
@@ -2188,15 +2398,158 @@ async function handleSubmit(event) {
 }
 
 async function submitPortalLogin(values) {
-  const expected = config.portalPasswords?.[activeRole] || "";
-  if (!expected || values.password !== expected) {
-    showToast("Incorrect password.");
+  if (!supabaseEnabled || !supabaseClient) {
+    showToast("Sign-in needs a live database connection.");
     return;
   }
-  unlockedRoles.add(activeRole);
-  activeSection = activeRole === "owner" ? "owners" : activeRole === "printing" ? "cards" : activeRole === "webadmin" ? "content" : "staff";
+  const email = String(values.email || "").trim().toLowerCase();
+  const password = String(values.password || "");
+  if (!email || !password) {
+    showToast("Enter your email and password.");
+    return;
+  }
+
+  authBusy = true;
   render();
-  showToast(`${activeRoleLabel()} portal unlocked.`);
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    authSession = data.session;
+    await loadAuthProfile();
+    if (!authProfile) {
+      await supabaseClient.auth.signOut();
+      showToast("No MACOKASA profile is linked to this account.");
+      return;
+    }
+    if (!authProfile.isActive) {
+      await supabaseClient.auth.signOut();
+      authSession = null;
+      authProfile = null;
+      showToast("This account has been deactivated.");
+      return;
+    }
+    applyProfileRole();
+    showToast(`Signed in as ${roleLabelFor(authProfile.role)}.`);
+  } catch (error) {
+    console.error(error);
+    // Deliberately generic: never reveal whether the email exists.
+    showToast("Sign-in failed. Check your email and password.");
+  } finally {
+    authBusy = false;
+    render();
+  }
+}
+
+/* ---- Authentication (Supabase Auth) ---- */
+
+async function loadAuthProfile() {
+  authProfile = null;
+  if (!supabaseClient || !authSession?.user?.id) return;
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select("id, full_name, role, district, is_active")
+    .eq("id", authSession.user.id)
+    .maybeSingle();
+  if (error) {
+    console.error(error);
+    return;
+  }
+  if (!data) return;
+  authProfile = {
+    id: data.id,
+    fullName: data.full_name || "",
+    role: data.role || "member",
+    district: data.district || "",
+    isActive: data.is_active !== false
+  };
+}
+
+function applyProfileRole() {
+  unlockedRoles = new Set(["public"]);
+  if (!authProfile?.isActive) return;
+  const role = authProfile.role;
+  if (["staff", "owner", "printing", "webadmin"].includes(role)) {
+    unlockedRoles.add(role);
+    activeRole = role;
+    activeSection =
+      role === "owner" ? "owners" : role === "printing" ? "cards" : role === "webadmin" ? "content" : "staff";
+  }
+}
+
+async function restoreSession() {
+  if (!supabaseClient) {
+    authChecked = true;
+    return;
+  }
+  try {
+    const { data } = await supabaseClient.auth.getSession();
+    authSession = data?.session || null;
+    if (authSession) {
+      await loadAuthProfile();
+      if (authProfile?.isActive) {
+        unlockedRoles.add(authProfile.role);
+      }
+    }
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+      authSession = session;
+      if (event === "SIGNED_OUT") {
+        authProfile = null;
+        unlockedRoles = new Set(["public"]);
+        activeRole = "public";
+        activeSection = "public";
+        render();
+      }
+    });
+  } catch (error) {
+    console.error(error);
+  } finally {
+    authChecked = true;
+  }
+}
+
+async function signOut() {
+  try {
+    await supabaseClient?.auth.signOut();
+  } catch (error) {
+    console.error(error);
+  }
+  authSession = null;
+  authProfile = null;
+  unlockedRoles = new Set(["public"]);
+  activeRole = "public";
+  activeSection = "public";
+  render();
+  showToast("Signed out.");
+}
+
+async function requestPasswordReset() {
+  if (!supabaseClient) {
+    showToast("Password reset needs a live database connection.");
+    return;
+  }
+  const email = window.prompt("Enter your work email to receive a reset link:");
+  if (!email) return;
+  try {
+    await supabaseClient.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+      redirectTo: appBaseUrl()
+    });
+  } catch (error) {
+    console.error(error);
+  }
+  // Always the same message, so the form cannot be used to enumerate accounts.
+  showToast("If that account exists, a reset link has been sent.");
+}
+
+function roleLabelFor(role) {
+  return (
+    {
+      staff: "Staff ERP",
+      owner: "Motorcycle owner",
+      printing: "Printing and cards",
+      webadmin: "Website administrator",
+      member: "Member"
+    }[role] || "Member"
+  );
 }
 
 async function submitOperator(values) {
@@ -2233,7 +2586,7 @@ async function submitOperator(values) {
     trackerInstalled: values.trackerInstalled === "Yes",
     status: values.hasLicense === "Yes" ? "active" : "training due",
     photoData: storedPhoto,
-    photoUrl: storedPhoto.startsWith("http") ? storedPhoto : "",
+    photoUrl: /^(https?:|storage:)/.test(storedPhoto) ? storedPhoto : "",
     photoCapturedAt: new Date().toISOString(),
     createdAt: today()
   };
@@ -2723,22 +3076,20 @@ function paymentMethodCard(context, activeMethod, method, title, label, descript
 
 function paymentFieldsFor(method, context) {
   if (method === "card") {
+    // PCI-DSS: MACOKASA must never render fields that capture a primary
+    // account number or CVV. Card payments will be handled by a licensed
+    // hosted checkout. See docs/PAYMENTS.md for the integration contract.
     return `
-      <div class="debit-card-preview" aria-label="Debit card preview">
-        <div class="card-preview-top"><span class="card-chip" aria-hidden="true"></span><span class="card-brand">MACOKASA Payments</span></div>
-        <strong class="card-preview-number" data-card-preview-number>0000 0000 0000 0000</strong>
-        <div class="card-preview-bottom">
-          <span><small>Card holder</small><b data-card-preview-name>FULL NAME</b></span>
-          <span><small>Expires</small><b data-card-preview-expiry>MM/YY</b></span>
-        </div>
+      <div class="secure-note pending-integration">
+        <strong>Bank card payments are not yet enabled.</strong>
+        <p>MACOKASA is completing certification with a licensed payment provider. Card details are never collected or stored by this system. Please use AirtelMoney, TNM Mpamba, bank transfer, or cash in the meantime.</p>
       </div>
-      <label class="field full"><span>Name on card</span><input class="input-control" type="text" placeholder="Full name" data-card-field="name"></label>
-      <label class="field full"><span>Card number</span><input class="input-control" type="text" inputmode="numeric" placeholder="4242 4242 4242 4242" data-card-field="number"></label>
-      <div class="field-row">
-        <label class="field"><span>Expiry</span><input class="input-control" type="text" inputmode="numeric" placeholder="MM/YY" data-card-field="expiry"></label>
-        <label class="field"><span>CVV</span><input class="input-control" type="text" inputmode="numeric" placeholder="123"></label>
+      <div class="alt-method-actions">
+        <button class="quiet-btn" type="button" data-payment-context="${context}" data-payment-method="airtel">Use AirtelMoney</button>
+        <button class="quiet-btn" type="button" data-payment-context="${context}" data-payment-method="mpamba">Use Mpamba</button>
+        <button class="quiet-btn" type="button" data-payment-context="${context}" data-payment-method="eft">Use bank transfer</button>
       </div>
-      <input type="hidden" name="reference" value="Card payment pending" />
+      <input type="hidden" name="reference" value="" />
       <input type="hidden" name="collectorName" value="" />
     `;
   }
@@ -2768,28 +3119,12 @@ function paymentMethodLabel(method) {
   }[method] || method;
 }
 
-function updatePaymentCardPreview(widget) {
-  if (!widget) return;
-  const number = widget.querySelector('[data-card-field="number"]')?.value || "";
-  const name = widget.querySelector('[data-card-field="name"]')?.value || "";
-  const expiry = widget.querySelector('[data-card-field="expiry"]')?.value || "";
-  const numberTarget = widget.querySelector("[data-card-preview-number]");
-  const nameTarget = widget.querySelector("[data-card-preview-name]");
-  const expiryTarget = widget.querySelector("[data-card-preview-expiry]");
-  if (numberTarget) numberTarget.textContent = formatCardNumber(number);
-  if (nameTarget) nameTarget.textContent = name.trim().toUpperCase() || "FULL NAME";
-  if (expiryTarget) expiryTarget.textContent = expiry.trim() || "MM/YY";
-}
 
-function formatCardNumber(value) {
-  const digits = String(value || "").replace(/\D/g, "").slice(0, 16).padEnd(16, "0");
-  return digits.replace(/(.{4})/g, "$1 ").trim();
-}
 
 function operatorTable(rows) {
   if (!rows.length) return `<div class="empty-state">No operators yet.</div>`;
   return table(["Member", "Mode", "Sex", "District", "Area", "Plan", "Licence", "Safety", "Expires"], rows.map((operator) => [
-    `<div class="operator-identity"><img src="${escapeAttr(operator.photoUrl || operator.photoData || "./assets/member-photo-placeholder.png")}" alt="" /><div><strong>${escapeHtml(operator.fullName)}</strong><br><span class="microcopy">${escapeHtml(operator.membershipNumber)}</span></div></div>`,
+    `<div class="operator-identity"><img src="${escapeAttr(memberPhotoSrc(operator))}" data-photo-ref="${escapeAttr(operator.photoUrl || operator.photoData || "")}" loading="lazy" alt="" /><div><strong>${escapeHtml(operator.fullName)}</strong><br><span class="microcopy">${escapeHtml(operator.membershipNumber)}</span></div></div>`,
     operator.operatorCategory || "Motorcycle operator",
     operator.sex || "Not recorded",
     operator.district,
@@ -2964,7 +3299,8 @@ function cardPreview(operator, card) {
   const plan = planByKey(card?.membershipPlan || operator.membershipPlan);
   const token = card?.qrToken || `qr-${operator.id}-preview`;
   const verifyUrl = `${appBaseUrl()}/?verify=${encodeURIComponent(token)}`;
-  const memberPhoto = operator.photoUrl || operator.photoData || "./assets/member-photo-placeholder.png";
+  const memberPhoto = memberPhotoSrc(operator);
+  const memberPhotoRef = operator.photoUrl || operator.photoData || "";
   return `
     <div class="card-preview">
       <div class="card-stack">
@@ -2979,7 +3315,7 @@ function cardPreview(operator, card) {
           </div>
           <div class="id-card-body">
             <div class="member-photo-panel">
-              <div class="member-photo has-image" data-card-photo-preview style="background-image:url('${escapeAttr(memberPhoto)}')">
+              <div class="member-photo has-image" data-card-photo-preview data-photo-bg-ref="${escapeAttr(memberPhotoRef)}" style="background-image:url('${escapeAttr(memberPhoto)}')">
                 <span class="member-initials">${initials(operator.fullName)}</span>
               </div>
               <span class="card-tier photo-tier" data-card-plan-label>${escapeHtml(plan?.name || "Member")}</span>
@@ -3453,4 +3789,129 @@ function iconArrow() { return svg("M5 12h14M14 7l5 5-5 5"); }
 function iconArrowLeft() { return svg("M19 12H5M10 7l-5 5 5 5"); }
 function svg(path) {
   return `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="${path}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+/* ============================================================
+   Legal pages, demo notice, and organisation details (P1-1..4)
+   ============================================================ */
+
+function orgDetail(key, fallback = "") {
+  return (config.organisation && config.organisation[key]) || fallback;
+}
+
+function demoDataNotice() {
+  if (!config.useDemoData) return "";
+  return `
+    <div class="demo-banner" role="status">
+      <strong>Demonstration data</strong>
+      <span>Operators, payments, and cards shown here are sample records for evaluation. This build is not connected to the live MACOKASA membership database.</span>
+    </div>
+  `;
+}
+
+function renderPrivacyPage() {
+  const updated = "25 July 2026";
+  return `
+    <section class="public-page-header legal-header">
+      <p class="eyebrow">Legal</p>
+      <h1>Privacy notice</h1>
+      <p>How MACOKASA collects, uses, and protects personal information belonging to Kabaza operators, motorcycle owners, and members of the public.</p>
+      <small class="microcopy">Last updated ${updated}</small>
+    </section>
+
+    <section class="legal-body public-band">
+      <article class="legal-article">
+        <h2>1. Who we are</h2>
+        <p>The Malawi Coalition for Kabaza Stakeholders Association (MACOKASA) is the data controller for information processed through this platform. Contact us at ${escapeHtml(orgDetail("email", "the address published on our About page"))}.</p>
+
+        <h2>2. Information we collect</h2>
+        <ul>
+          <li><strong>Identity data</strong> — full name, sex, district, area, and membership number.</li>
+          <li><strong>Contact data</strong> — telephone number and, where provided, email address.</li>
+          <li><strong>Photographs</strong> — a facial portrait used solely to produce your membership identity card.</li>
+          <li><strong>Vehicle data</strong> — motorcycle or bicycle registration, plate, and ownership linkage.</li>
+          <li><strong>Financial data</strong> — subscription and donation records, payment method, reference numbers, and reconciliation status. We do not collect or store bank card numbers.</li>
+          <li><strong>Verification data</strong> — a log of when a membership QR code was scanned.</li>
+        </ul>
+
+        <h2>3. Why we process it</h2>
+        <p>To register and renew membership, issue and verify identity cards, administer subscriptions and cooperative funds, coordinate road safety training with partners such as ROSAF, and report anonymised sector statistics to public institutions.</p>
+
+        <h2>4. Your photograph</h2>
+        <p>Facial portraits are stored in private, access-controlled storage. They are visible only to authorised MACOKASA registration and card printing personnel, are never published on the public website, and are never shared for advertising. You may request removal at any time; note that a valid ID card cannot be issued without one.</p>
+
+        <h2>5. Who we share it with</h2>
+        <p>We share personal data only with: transport and licensing authorities where legally required; accredited training partners, limited to confirming your membership status; and our technology providers acting under contract. We never sell personal data.</p>
+
+        <h2>6. How long we keep it</h2>
+        <p>Membership records are retained for the duration of membership and for six years afterwards to meet accounting and audit obligations. Photographs are deleted within 90 days of a membership lapsing without renewal. QR scan logs are retained for 12 months.</p>
+
+        <h2>7. Your rights</h2>
+        <p>You may request access to your data, correction of inaccurate details, deletion where we have no overriding legal obligation, and a copy of your record in a portable format. Contact ${escapeHtml(orgDetail("email", "MACOKASA"))} and we will respond within 30 days.</p>
+
+        <h2>8. Security</h2>
+        <p>Access to member records requires an individual authenticated account with a defined role. All record changes are written to an immutable audit log. Data is transmitted over encrypted connections and stored with row-level access controls.</p>
+
+        <h2>9. Local storage on your device</h2>
+        <p>This platform stores working data in your browser so that registration can continue during a network interruption. This is not advertising tracking and no third-party marketing cookies are set. Clearing your browser data removes it.</p>
+
+        <h2>10. Complaints</h2>
+        <p>If you believe your data has been mishandled, contact us first. You retain the right to complain to the relevant Malawian data protection authority.</p>
+      </article>
+      <button class="quiet-btn" type="button" data-section="public">Return to the website</button>
+    </section>
+  `;
+}
+
+function renderTermsPage() {
+  const updated = "25 July 2026";
+  return `
+    <section class="public-page-header legal-header">
+      <p class="eyebrow">Legal</p>
+      <h1>Terms of use</h1>
+      <p>The conditions under which MACOKASA provides membership services, identity cards, and this online platform.</p>
+      <small class="microcopy">Last updated ${updated}</small>
+    </section>
+
+    <section class="legal-body public-band">
+      <article class="legal-article">
+        <h2>1. Acceptance</h2>
+        <p>By registering for membership or using this platform you agree to these terms. If you do not accept them, do not use the service.</p>
+
+        <h2>2. Membership eligibility</h2>
+        <p>Membership is open to pedal and motorcycle taxi operators, motorcycle owners, and affiliated stakeholders operating within Malawi. MACOKASA may decline or revoke membership where information supplied is false, where fees remain unpaid, or where conduct endangers passengers or the public.</p>
+
+        <h2>3. Accuracy of information</h2>
+        <p>You are responsible for the accuracy of the details you submit, including your name, district, contact number, and vehicle particulars. Notify MACOKASA promptly of any change.</p>
+
+        <h2>4. Identity cards</h2>
+        <p>A MACOKASA identity card remains the property of the Association. It confirms membership standing only; it is not a driving licence, roadworthiness certificate, or authorisation to operate issued by any public authority. Cards must not be altered, shared, or transferred. Report loss immediately so the QR token can be invalidated.</p>
+
+        <h2>5. Fees and payments</h2>
+        <p>Registration, renewal, and card fees are published on the registration page and may be revised with notice. Fees are payable via AirtelMoney, TNM Mpamba, bank transfer, or cash to an authorised collector who must issue a receipt. Payments are generally non-refundable once a card has been produced. MACOKASA does not collect bank card details through this platform.</p>
+
+        <h2>6. Donations</h2>
+        <p>Donations support road safety mobilisation, training subsidies, and cooperative activity. Donations are voluntary and non-refundable, and do not confer membership or governance rights.</p>
+
+        <h2>7. Portal access</h2>
+        <p>Staff, owner, printing, and administration accounts are issued to named individuals. You must not share credentials. All activity is attributed to your account and logged. Report suspected compromise immediately.</p>
+
+        <h2>8. Acceptable use</h2>
+        <p>You must not attempt to gain unauthorised access, interfere with the service, extract bulk member data, or upload unlawful or misleading content.</p>
+
+        <h2>9. Service availability</h2>
+        <p>The platform is provided on an "as available" basis. MACOKASA does not guarantee uninterrupted access and may suspend the service for maintenance.</p>
+
+        <h2>10. Limitation of liability</h2>
+        <p>MACOKASA is not liable for loss arising from a member's conduct on the road, from disputes between operators and owners, or from reliance on information that a member supplied inaccurately. Nothing in these terms excludes liability that cannot lawfully be excluded.</p>
+
+        <h2>11. Governing law</h2>
+        <p>These terms are governed by the laws of the Republic of Malawi.</p>
+
+        <h2>12. Changes</h2>
+        <p>We may update these terms. Continued use after publication of a revised version constitutes acceptance.</p>
+      </article>
+      <button class="quiet-btn" type="button" data-section="public">Return to the website</button>
+    </section>
+  `;
 }

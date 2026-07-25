@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
     "build": "node scripts/write-config.mjs",
-    "check": "node --check src/app.js && node --check src/data.js && node --check scripts/dev-server.mjs && node --check scripts/write-config.mjs"
+    "check": "node --check src/app.js && node --check src/data.js && node --check scripts/dev-server.mjs && node --check scripts/write-config.mjs && node --check scripts/security-check.mjs",
+    "security": "node scripts/security-check.mjs",
+    "verify": "npm run check && npm run build && npm run security"
   }
 }
