@@ -1,148 +1,132 @@
-# MACOKASA Kabaza Management System
+# MACOKASA — Operations Platform
 
-Public website and management platform for the Malawi Coalition for Kabaza
-Stakeholders Association — operator registration, membership and renewals,
-QR identity cards, payments and finance, safety compliance, cooperative loans,
-and impact reporting.
+The national register of Malawi Kabaza taxi operators: membership,
+identity cards, fleet management and finance.
+
+MACOKASA is **tenant #2** on the Quick-Think Solution multi-tenant
+platform, alongside SmartROSAF. One codebase, one Supabase project, many
+tenants, isolated by `tenant_id` and enforced by PostgreSQL row-level
+security.
+
+---
+
+## What it does
+
+| Area | Capability |
+|---|---|
+| **Registration** | Clerk-operated wizard. Every step is confirmed before the next unlocks; a final review shows everything back before saving. Face photo captured by camera or upload. |
+| **Deferred payment** | A member with no money today is saved as `pending_payment`, searchable, and converted the moment they pay. |
+| **Two operator types** | Pedalists (bicycle) and motorists (motorcycle) have separate number series, fees, compliance rules and card designs. |
+| **Owners** | A person may ride, own and rent out, or both — one member record with role flags. Owners get a fleet tool and access to MACOKASA-verified operators. |
+| **Cards** | Printed once, enforced by the database. Queue sorted by district, area and filing clerk. Reprints need operations approval. |
+| **Finance** | Append-only ledger, configurable revenue split, clerk cash custody, remittance verification, Quick-Think settlement. |
+| **Configuration** | Fees, benefits, split ratio and term length are data, edited by admins, never code. |
+
+There is **no public self-registration**. Members are registered by
+MACOKASA clerks, face to face.
+
+---
+
+## Running it
+
+```bash
+npm run build      # writes public/config.js, copies src -> public/src
+npm run dev        # http://127.0.0.1:4177/
+
+npm run check      # syntax-check every JS file
+npm run sqlcheck   # parse migrations with the real PostgreSQL parser
+npm run security   # secrets, tenancy and PCI scan
+npm test           # finance arithmetic + application rules
+npm run bootcheck  # boot the app in jsdom (needs: npm i)
+npm run verify     # check + build + security + test
+```
+
+Without `SUPABASE_URL` and `SUPABASE_ANON_KEY` the app shows a
+configuration notice. It does not run on local data — membership, money
+and cards all live in the database.
+
+Camera capture needs `localhost` or HTTPS.
 
 ---
 
 ## Architecture
 
-| Layer | Technology |
-|---|---|
-| Frontend | Vanilla ES modules, no framework, no bundler |
-| Styling | Single CSS file with a design-token system |
-| Data | Supabase (Postgres + Realtime + Storage + Auth) |
-| Offline | `localStorage` working copy, synced when online |
-| Hosting | Render static site |
+```
+src/
+  app.js              shell, routing, auth, public verification
+  lib/
+    api.js            every read and write; RLS is the real boundary
+    dom.js            escaping and templating
+    format.js         money, dates, Malawi phone handling
+  ui/
+    components.js     panels, tables, modals, toasts, badges
+    icons.js          inline SVG set
+    idcard.js         pedalist and motorist card rendering
+    photo.js          camera capture and image normalisation
+  screens/
+    dashboard.js  register.js  members.js  cards.js
+    finance.js    fleet.js     settings.js
 
-**Source of truth is `src/`.** The build copies `src/` into `public/src/` and
-generates `public/config.js`. Both are gitignored — never edit files under
-`public/src/`, your changes will be overwritten on the next build.
-
----
-
-## Local development
-
-```bash
-npm run build     # generates public/config.js and copies src -> public/src
-npm run dev       # serves http://127.0.0.1:4177/
-npm run check     # syntax validation
-npm test          # operator category logic tests
-npm run security  # secret / PCI / RLS scan
-npm run verify    # all of the above
+supabase/migrations/
+  0001_platform_core.sql        tenants, roles, settings, notifications, audit
+  0002_macokasa_membership.sql  members, packages, fees, vehicles, cards
+  0003_finance.sql              ledger, payments, custody, settlements
+  0004_workflow_and_config.sql  workflow functions, verification, seed data
 ```
 
-Without `SUPABASE_URL` and `SUPABASE_ANON_KEY` the app runs on demonstration
-data and displays a banner saying so. Portal sign-in is disabled in that mode.
-
-To develop against a real project, create `.env` from `.env.example` and export
-the variables before running the build.
-
-Camera capture for member photos requires `localhost` or HTTPS.
+Full detail in **`docs/ARCHITECTURE.md`**. Deployment in
+**`docs/DEPLOYMENT.md`**.
 
 ---
 
-## Security model
+## The money model, briefly
 
-Read this before changing anything that touches data.
+Revenue splits at collection by a configured ratio (currently 80 MACOKASA
+/ 20 Quick-Think), on registration and renewal only.
 
-- **Authentication is Supabase Auth.** Individual accounts, email + password.
-  There are no shared passwords. The prototype's client-side password gate was
-  removed because `public/config.js` is world-readable.
-- **Authorisation is row level security** keyed on `profiles.role`.
-  Roles: `staff`, `owner`, `printing`, `webadmin`, `member`.
-  Anonymous visitors can read nothing and may only insert QR scan logs.
-- **Roles are assigned in SQL only**, never from the browser.
-- **Member photographs live in a private bucket.** Records store a
-  `storage:member-photos/<path>` reference; the client mints a 5-minute signed
-  URL at render time.
-- **Every record mutation is written to `audit_log`** with the acting user and
-  before/after snapshots. Financial records cannot be deleted by anyone.
-- **`public/config.js` is public.** Never add a secret to
-  `scripts/write-config.mjs`. The build warns if legacy password variables are
-  detected in the environment.
+```
+Actual     = 100% of what was collected
+Available  = MACOKASA's share, less its own drawings
+```
+
+**Paying Quick-Think does not reduce Available.** The split already
+happened; that 20% was never MACOKASA's money. A settlement draws down
+the Quick-Think balance and books a memo expense for reporting.
+
+Every payment enters the collecting clerk's custody. The clerk submits a
+remittance; **finance verifies it, and a clerk cannot verify their own.**
 
 ---
 
-## Operator categories
+## Separation of duties
 
-MACOKASA registers two distinct kinds of taxi operator. They are modelled
-separately throughout — fees, compliance criteria, membership numbering, and
-ID card design.
+Enforced in SQL, not just the interface:
 
-| | Motorcycle operator | Bicycle operator (pedal) |
-|---|---|---|
-| Code | `M` | `B` |
-| Membership no. | `MCK-M-LL-2026-0001` | `MCK-B-BT-2026-0001` |
-| Plans | Regular / Silver / Gold / Platinum | Pedal Regular / Silver / Gold |
-| Entry fee | K15,000 | K7,500 |
-| Card band | `MOTORCYCLE TAXI`, navy | `PEDAL TAXI`, cyan |
-| Vehicle field | Plate number | Bicycle ID |
-| Compliance | Driving licence, rider + passenger helmet, tracker | Reflector, training record, bicycle ID |
-
-Sequence numbers are counted per category, so the two series never collide.
-Membership plans are constrained to the operator's category at both
-registration and card design — a pedal operator cannot be placed on a
-motorcycle plan.
-
-The same split applies to owners and vehicles:
-
-| | Motorcycle owner | Bicycle owner |
-|---|---|---|
-| Plans | Owner Basic K45,000 / Fleet K120,000 | Pedal Owner Basic K22,500 / Fleet K60,000 |
-| Vehicle record | Plate, helmet count, tracker eligibility | Bicycle ID, reflector condition |
-| Default target | K180,000/month | K45,000/month |
-
-A vehicle cannot be assigned to an operator of the other category — the form
-refuses it and the fleet table flags any legacy mismatch. The plan `audience`
-key `"Motorcycle Owner"` is retained for data compatibility but is never shown
-to a pedal owner; `planAudienceLabel()` renders the correct wording.
-
-To add a category, extend `OPERATOR_CATEGORIES` in `src/app.js` and add plans
-with a matching `category` field in `src/data.js`.
-
-## Documentation
-
-| Document | Purpose |
-|---|---|
-| `AUDIT.md` | Production readiness audit — open issues by severity |
-| `docs/DEPLOYMENT.md` | Step-by-step production runbook and verification checklist |
-| `docs/PAYMENTS.md` | Payment integration contract and PCI constraints |
-| `supabase/schema.sql` | Database schema, RLS policies, audit triggers |
+- a clerk cannot confirm a payment they collected
+- a clerk cannot verify their own remittance
+- only operations may approve a card reprint
+- Quick-Think cannot request more than its available balance
+- the ledger and audit log are revoked from every client role
 
 ---
 
-## Deployment
+## Roles
 
-See **`docs/DEPLOYMENT.md`**. Summary:
+`platform_admin` · `tenant_admin` · `operations` · `finance` · `clerk` ·
+`printing` · `viewer`
 
-1. Run `supabase/schema.sql` in the Supabase SQL editor.
-2. Create the first staff user and assign the role in SQL.
-3. Deploy to Render from `main`, build `npm run build`, publish `public`.
-4. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `PUBLIC_BASE_URL`.
-5. Delete any legacy `MACOKASA_*_PASSWORD` variables.
-6. Work through the post-deploy verification checklist.
+Assigned in SQL only, never from the browser.
 
 ---
 
-## Operations
+## Status
 
-- Membership reminders are dispatched from the ERP Operations Control screen and
-  logged per channel. **Providers are not yet contracted** — no real messages send.
-- Cash payments require a collector name and stay unreconciled until deposited.
-- Replacing, upgrading or downgrading a card invalidates the previous QR token.
-- Operator registration requires a face photo via live capture or upload.
+The migrations and application are complete and validated, but **not yet
+applied to any database**. Follow `docs/DEPLOYMENT.md`: staging first,
+then the nine-step smoke test, then production.
 
----
-
-## Known limitations
-
-Tracked in `AUDIT.md`. The significant ones:
-
-- Bank card payments disabled pending a licensed processor.
-- SMS / WhatsApp / email delivery not contracted.
-- Some organisation contact details are still placeholders.
-- Legal pages require review by a Malawian legal advisor.
-- Test coverage is limited to operator category logic.
+Outstanding before real member data:
+- run the migrations on staging and work the smoke test
+- contract an SMS provider (notifications queue but do not send)
+- legal review of retention and privacy posture
+- rotate the Supabase anon key exposed during earlier development
