@@ -26,6 +26,7 @@ let editingStoryId = "";
 let selectedStoryId = "";
 let storyFilter = "All";
 let selectedCardOperatorId = "";
+let registrationCategory = "Motorcycle operator";
 let activeCameraStream = null;
 let activeCameraForm = null;
 let cameraRequestId = 0;
@@ -695,7 +696,7 @@ function renderHomePage() {
         <span class="live-update-note"><i></i>${liveUpdateLabel()}</span>
       </div>
       <div class="live-impact-grid">
-        ${liveImpactMetric("Registered operators", compactNumber(impact.registeredOperators), "Pedal and motorcycle operator records", iconRegistry())}
+        ${liveImpactMetric("Registered operators", compactNumber(impact.registeredOperators), `${compactNumber(impact.motorcycleOperators)} motorcycle · ${compactNumber(impact.bicycleOperators)} pedal in current records`, iconRegistry())}
         ${liveImpactMetric("Registered motorcycles", compactNumber(impact.registeredMotorcycles), "Motorcycles connected to the formalisation effort", iconMotorcycle())}
         ${liveImpactMetric("Subscribed owners", compactNumber(impact.subscribedOwners), "Owners linked to accountable operator management", iconCoop())}
         ${liveImpactMetric("Districts reached", String(impact.districtsReached), "District committees supporting registration", iconChart())}
@@ -1264,7 +1265,7 @@ function renderRegistration() {
     <section class="public-page-header registration-header">
       <p class="eyebrow">Public registration</p>
       <h1>Register a bicycle or motorcycle operator</h1>
-      <p>Capture the operator's membership, sex, district, rank, safety, licence, and identification details for MACOKASA verification.</p>
+      <p>Motorcycle and pedal Kabaza operators are registered separately. Choose the category first — it sets the annual fee, the details collected, and the design of the member ID card.</p>
     </section>
     <section class="grid">
       <div class="panel span-7">
@@ -1278,10 +1279,21 @@ function renderRegistration() {
         ${operatorForm()}
       </div>
       <div class="panel span-5">
-        <h2>Membership categories</h2>
-        <div class="plan-grid">
-          ${membershipPlans.filter((plan) => plan.audience === "Operator").map(planCard).join("")}
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">${escapeHtml(categoryMeta(registrationCategory).short)} membership</p>
+            <h2>Annual fees</h2>
+          </div>
+          ${categoryBadge(registrationCategory)}
         </div>
+        <div class="plan-grid">
+          ${plansForCategory(registrationCategory).map(planCard).join("")}
+        </div>
+        <p class="microcopy">${
+          isPedal(registrationCategory)
+            ? "Pedal Kabaza fees are set at roughly half the motorcycle rate in recognition of lower daily earnings."
+            : "Motorcycle membership includes plate, licence, and helmet compliance tracking."
+        }</p>
       </div>
       <div class="panel span-12">
         <div class="table-header"><h2>Latest public registrations</h2></div>
@@ -1696,7 +1708,7 @@ function renderAnalytics() {
         <div class="split-list">
           <div class="record-card"><strong>${trainingGap} training gap(s)</strong><span>Operators in the current record set still need licence or training support.</span></div>
           <div class="record-card"><strong>${state.operators.filter((operator) => !operator.passengerHelmet).length} passenger helmet gap(s)</strong><span>Passenger safety records show where safer-rank promotion needs attention.</span></div>
-          <div class="record-card"><strong>${state.operators.filter((operator) => operator.operatorCategory === "Bicycle operator").length} bicycle operator record(s)</strong><span>Pedal operators are now part of the same formalization lens.</span></div>
+          <div class="record-card"><strong>${state.operators.filter((operator) => isPedal(operatorCategoryOf(operator))).length} pedal Kabaza record(s)</strong><span>Bicycle operators are tracked as a distinct category with their own fees, compliance criteria, and ID design.</span></div>
         </div>
       </div>
       <div class="panel span-6">
@@ -1872,9 +1884,20 @@ function memberPhotoCapture() {
 }
 
 function operatorForm() {
+  const category = registrationCategory;
+  const pedal = isPedal(category);
   return `
-    <form class="form-grid" data-form="operator">
-      <label class="field"><span>Operator category</span>${select("operatorCategory", ["Motorcycle operator", "Bicycle operator"], "Motorcycle operator")}</label>
+    <form class="form-grid" data-form="operator" data-operator-category="${escapeAttr(category)}">
+      <fieldset class="field full category-chooser">
+        <legend>Operator category</legend>
+        <p class="microcopy">This determines the membership fees, the details we collect, and the design of the member ID card.</p>
+        <div class="category-options">
+          ${categoryOptionCard("Motorcycle operator", iconMotorcycle(), "Kabaza motorcycle taxi", "Driving licence, plate, and helmet compliance recorded.", category)}
+          ${categoryOptionCard("Bicycle operator", iconBicycle(), "Pedal Kabaza taxi", "Bicycle identification, reflector, and rank details recorded.", category)}
+        </div>
+        <input type="hidden" name="operatorCategory" value="${escapeAttr(category)}" />
+      </fieldset>
+
       <label class="field"><span>Full name</span><input class="input-control" name="fullName" required /></label>
       <label class="field"><span>Phone</span><input class="input-control" name="phone" required placeholder="+265..." /></label>
       <label class="field"><span>Email</span><input class="input-control" type="email" name="email" /></label>
@@ -1883,20 +1906,62 @@ function operatorForm() {
       ${memberPhotoCapture()}
       <label class="field"><span>District</span>${select("district", districts, "Lilongwe")}</label>
       <label class="field"><span>Operating area/rank</span><input class="input-control" name="operatingArea" required /></label>
-      <label class="field"><span>Membership</span>${planSelect("membershipPlan", "regular", "Operator")}</label>
-      <label class="field"><span>Owns or rents?</span>${select("ownershipStatus", ["Owns motorcycle", "Rents motorcycle", "Owns bicycle", "Rents bicycle"], "Rents motorcycle")}</label>
-      <label class="field"><span>Licence or training record?</span>${select("hasLicense", ["Yes", "No"], "No")}</label>
-      <label class="field"><span>Licence / training number</span><input class="input-control" name="licenseNumber" /></label>
-      <label class="field"><span>Plate / bicycle ID</span><input class="input-control" name="licensePlate" placeholder="LL 0000 or bicycle ID" /></label>
-      <label class="field"><span>Helmet use</span>${select("helmetUse", ["Yes", "No"], "Yes")}</label>
-      <label class="field"><span>Passenger helmet</span>${select("passengerHelmet", ["Yes", "No"], "No")}</label>
-      <label class="field"><span>Tracker installed</span>${select("trackerInstalled", ["Yes", "No"], "No")}</label>
-      <button class="primary-btn" type="submit">Register operator</button>
+
+      <label class="field"><span>Membership</span>${planSelectForCategory("membershipPlan", category)}</label>
+      <label class="field"><span>Owns or rents?</span>${
+        pedal
+          ? select("ownershipStatus", ["Owns bicycle", "Rents bicycle"], "Owns bicycle")
+          : select("ownershipStatus", ["Owns motorcycle", "Rents motorcycle"], "Rents motorcycle")
+      }</label>
+
+      ${pedal ? `
+        <label class="field"><span>Bicycle identification</span><input class="input-control" name="licensePlate" placeholder="Rank or frame ID, e.g. BIC-BT-3402" /></label>
+        <label class="field"><span>Reflector fitted</span>${select("reflectorFitted", ["Yes", "No"], "Yes")}</label>
+        <label class="field"><span>Road safety training completed</span>${select("hasLicense", ["Yes", "No"], "No")}</label>
+        <label class="field"><span>Training record number</span><input class="input-control" name="licenseNumber" placeholder="Training certificate reference" /></label>
+        <label class="field"><span>Carries passengers</span>${select("carriesPassengers", ["Yes", "No"], "Yes")}</label>
+      ` : `
+        <label class="field"><span>Plate number</span><input class="input-control" name="licensePlate" placeholder="LL 0000" /></label>
+        <label class="field"><span>Holds a driving licence?</span>${select("hasLicense", ["Yes", "No"], "No")}</label>
+        <label class="field"><span>Licence number</span><input class="input-control" name="licenseNumber" placeholder="DL-..." /></label>
+        <label class="field"><span>Rider helmet</span>${select("helmetUse", ["Yes", "No"], "Yes")}</label>
+        <label class="field"><span>Passenger helmet</span>${select("passengerHelmet", ["Yes", "No"], "No")}</label>
+        <label class="field"><span>Tracker installed</span>${select("trackerInstalled", ["Yes", "No"], "No")}</label>
+      `}
+
+      <button class="primary-btn" type="submit">Register ${pedal ? "pedal" : "motorcycle"} operator</button>
     </form>
   `;
 }
 
+function categoryOptionCard(value, icon, title, note, active) {
+  const selected = value === active;
+  return `
+    <button
+      class="category-option ${selected ? "is-selected" : ""} ${isPedal(value) ? "is-pedal" : "is-motor"}"
+      type="button"
+      data-operator-category-choice="${escapeAttr(value)}"
+      aria-pressed="${selected}"
+    >
+      <span class="category-option-icon">${icon}</span>
+      <span class="category-option-copy">
+        <strong>${escapeHtml(title)}</strong>
+        <small>${escapeHtml(note)}</small>
+      </span>
+    </button>
+  `;
+}
+
 function handleClick(event) {
+  const categoryChoice = event.target.closest("[data-operator-category-choice]");
+  if (categoryChoice) {
+    registrationCategory = normaliseCategory(categoryChoice.dataset.operatorCategoryChoice);
+    render();
+    requestAnimationFrame(() => {
+      document.querySelector("[data-form='operator']")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return;
+  }
   const storyFilterButton = event.target.closest("[data-story-filter]");
   if (storyFilterButton) {
     storyFilter = storyFilterButton.dataset.storyFilter || "All";
@@ -2558,33 +2623,48 @@ async function submitOperator(values) {
     document.querySelector("[data-member-photo-capture]")?.scrollIntoView({ behavior: "smooth", block: "center" });
     return;
   }
-  const plan = planByKey(values.membershipPlan);
+  const category = normaliseCategory(values.operatorCategory);
+  const meta = categoryMeta(category);
+  const pedal = isPedal(category);
+
+  // Membership plan must belong to the chosen category.
+  const allowedPlans = plansForCategory(category);
+  const planKey = allowedPlans.some((item) => item.key === values.membershipPlan)
+    ? values.membershipPlan
+    : allowedPlans[0]?.key;
+  const plan = planByKey(planKey);
+
   const id = newId("op");
   const districtCode = (values.district || "MW").slice(0, 2).toUpperCase();
   const storedPhoto = await storeMemberPhoto(id, values.photoData);
+  // Sequence is per category so the two series never collide.
+  const sequence = state.operators.filter((item) => operatorCategoryOf(item) === category).length + 1;
   const operator = {
     id,
-    membershipNumber: `MCK-${districtCode}-${new Date().getFullYear()}-${String(state.operators.length + 1).padStart(4, "0")}`,
+    membershipNumber: `MCK-${meta.code}-${districtCode}-${new Date().getFullYear()}-${String(sequence).padStart(4, "0")}`,
     fullName: values.fullName,
     phone: values.phone,
     email: values.email,
     nationalId: values.nationalId,
-    operatorCategory: values.operatorCategory,
+    operatorCategory: category,
+    operatorCategoryKey: meta.key,
     sex: values.sex,
     district: values.district,
     operatingArea: values.operatingArea,
-    membershipPlan: values.membershipPlan,
+    membershipPlan: planKey,
     membershipType: "operator",
     expiresOn: addDays(new Date(), 365),
     hasLicense: values.hasLicense === "Yes",
     licenseNumber: values.licenseNumber,
     ownershipStatus: values.ownershipStatus,
     motorcycleId: "",
-    helmetUse: values.helmetUse === "Yes",
-    passengerHelmet: values.passengerHelmet === "Yes",
+    helmetUse: pedal ? false : values.helmetUse === "Yes",
+    passengerHelmet: pedal ? false : values.passengerHelmet === "Yes",
+    reflectorFitted: pedal ? values.reflectorFitted === "Yes" : false,
+    carriesPassengers: pedal ? values.carriesPassengers !== "No" : true,
     licensePlate: values.licensePlate,
-    trackerInstalled: values.trackerInstalled === "Yes",
-    status: values.hasLicense === "Yes" ? "active" : "training due",
+    trackerInstalled: pedal ? false : values.trackerInstalled === "Yes",
+    status: values.hasLicense === "Yes" ? "active" : pedal ? "training recommended" : "training due",
     photoData: storedPhoto,
     photoUrl: /^(https?:|storage:)/.test(storedPhoto) ? storedPhoto : "",
     photoCapturedAt: new Date().toISOString(),
@@ -2595,10 +2675,11 @@ async function submitOperator(values) {
   await addRecord("cards", {
     id: newId("card"),
     operatorId: operator.id,
-    cardNumber: `CARD-MCK-${String(state.cards.length + 1).padStart(4, "0")}`,
+    cardNumber: `CARD-${meta.code}-${String(state.cards.length + 1).padStart(4, "0")}`,
     qrToken: `qr-${operator.id}-${Date.now()}`,
     status: "print queue",
     membershipPlan: operator.membershipPlan,
+    operatorCategory: category,
     issuedAt: "",
     replacedBy: ""
   });
@@ -2615,7 +2696,7 @@ async function submitOperator(values) {
     status: "pending",
     createdAt: today()
   });
-  showToast("Member registered. Face photo saved and the assigned ID card is in the print queue.");
+  showToast(`${pedal ? "Pedal" : "Motorcycle"} operator registered. ${meta.short} ID card is in the print queue.`);
 }
 
 async function submitPayment(values) {
@@ -2851,7 +2932,9 @@ function liveImpact() {
     registeredOperators: Math.max(Number(baseline.registeredOperators || 0) + operatorGrowth, state.operators?.length || 0),
     registeredMotorcycles: Math.max(Number(baseline.registeredMotorcycles || 0) + motorcycleGrowth, state.motorcycles?.length || 0),
     subscribedOwners: Math.max(Number(baseline.subscribedOwners || 0) + ownerGrowth, state.owners?.length || 0),
-    districtsReached: Math.max(Number(baseline.districtsReached || 0), representedDistricts)
+    districtsReached: Math.max(Number(baseline.districtsReached || 0), representedDistricts),
+    motorcycleOperators: (state.operators || []).filter((operator) => !isPedal(operatorCategoryOf(operator))).length,
+    bicycleOperators: (state.operators || []).filter((operator) => isPedal(operatorCategoryOf(operator))).length
   };
 }
 
@@ -2911,7 +2994,7 @@ function planCard(plan) {
     <article class="plan-card" style="--plan-color:${plan.color}">
       <h3>${escapeHtml(plan.name)}</h3>
       <strong>${money(plan.annualFee)} / year</strong>
-      <p class="microcopy">${escapeHtml(plan.audience)}</p>
+      <p class="microcopy">${escapeHtml(plan.category || plan.audience)}</p>
       <ul>${plan.benefits.map((benefit) => `<li>${escapeHtml(benefit)}</li>`).join("")}</ul>
     </article>
   `;
@@ -3014,11 +3097,13 @@ function cardDesignerForm(operator, card) {
         </select>
       </label>
       <label class="field"><span>Name on card</span><input class="input-control" name="cardName" value="${escapeAttr(operator.fullName)}" /></label>
-      <label class="field"><span>Membership class</span>${planSelect("cardPlan", card?.membershipPlan || operator.membershipPlan, "Operator")}</label>
+      <label class="field"><span>Membership class</span>${planSelectForCategory("cardPlan", operatorCategoryOf(operator), card?.membershipPlan || operator.membershipPlan)}</label>
       <label class="field"><span>Membership number</span><input class="input-control" name="cardNumber" value="${escapeAttr(operator.membershipNumber)}" /></label>
       <label class="field"><span>Sex</span>${select("cardSex", ["Male", "Female"], operator.sex || "Male")}</label>
       <label class="field"><span>Operating area</span><input class="input-control" name="cardArea" value="${escapeAttr(operator.operatingArea)}" /></label>
       <label class="field"><span>District</span>${select("cardDistrict", districts, operator.district)}</label>
+      <label class="field"><span>Operator category</span>${select("cardCategory", ["Motorcycle operator", "Bicycle operator"], operatorCategoryOf(operator))}</label>
+      <label class="field"><span>${escapeHtml(categoryMeta(operatorCategoryOf(operator)).idLabel)}</span><input class="input-control" name="cardVehicle" value="${escapeAttr(operator.licensePlate || "")}" /></label>
       <label class="field"><span>Replace saved face photo</span><input class="input-control" type="file" accept="image/*" data-card-photo /></label>
     </form>
   `;
@@ -3125,27 +3210,42 @@ function operatorTable(rows) {
   if (!rows.length) return `<div class="empty-state">No operators yet.</div>`;
   return table(["Member", "Mode", "Sex", "District", "Area", "Plan", "Licence", "Safety", "Expires"], rows.map((operator) => [
     `<div class="operator-identity"><img src="${escapeAttr(memberPhotoSrc(operator))}" data-photo-ref="${escapeAttr(operator.photoUrl || operator.photoData || "")}" loading="lazy" alt="" /><div><strong>${escapeHtml(operator.fullName)}</strong><br><span class="microcopy">${escapeHtml(operator.membershipNumber)}</span></div></div>`,
-    operator.operatorCategory || "Motorcycle operator",
+    categoryBadge(operatorCategoryOf(operator)),
     operator.sex || "Not recorded",
     operator.district,
     operator.operatingArea,
     planByKey(operator.membershipPlan)?.name || operator.membershipPlan,
-    operator.hasLicense ? `<span class="status green">Licensed</span>` : `<span class="status amber">Needs ROSAF</span>`,
+    operator.hasLicense
+      ? `<span class="status green">${isPedal(operatorCategoryOf(operator)) ? "Trained" : "Licensed"}</span>`
+      : `<span class="status amber">Needs ROSAF</span>`,
     safetyStatus(operator),
     compactDate(operator.expiresOn)
   ]));
 }
 
 function operatorSafetyTable(rows) {
-  return table(["Operator", "Licence", "Plate", "Helmet", "Passenger helmet", "Tracker", "Public status"], rows.map((operator) => [
-    operator.fullName,
-    operator.hasLicense ? operator.licenseNumber || "Yes" : `<span class="status amber">No licence</span>`,
-    operator.licensePlate || `<span class="status amber">Missing</span>`,
-    operator.helmetUse ? "Yes" : `<span class="status red">No</span>`,
-    operator.passengerHelmet ? "Yes" : `<span class="status amber">Missing</span>`,
-    operator.trackerInstalled ? "Installed" : planByKey(operator.membershipPlan)?.name === "Platinum" ? "Eligible" : "Not eligible",
-    safetyStatus(operator)
-  ]));
+  // Motorcycle and pedal operators are held to different, appropriate
+  // standards. A dash means the requirement does not apply to that category.
+  const na = `<span class="microcopy na-cell">—</span>`;
+  return table(
+    ["Operator", "Category", "Licence / training", "Vehicle ID", "Helmet", "Passenger helmet", "Reflector", "Tracker", "Public status"],
+    rows.map((operator) => {
+      const pedal = isPedal(operatorCategoryOf(operator));
+      return [
+        operator.fullName,
+        categoryBadge(operatorCategoryOf(operator)),
+        operator.hasLicense
+          ? operator.licenseNumber || "Yes"
+          : `<span class="status amber">${pedal ? "No training record" : "No licence"}</span>`,
+        operator.licensePlate || `<span class="status amber">Missing</span>`,
+        pedal ? na : operator.helmetUse ? "Yes" : `<span class="status red">No</span>`,
+        pedal ? na : operator.passengerHelmet ? "Yes" : `<span class="status amber">Missing</span>`,
+        pedal ? (operator.reflectorFitted ? "Yes" : `<span class="status red">No</span>`) : na,
+        pedal ? na : operator.trackerInstalled ? "Installed" : planByKey(operator.membershipPlan)?.name === "Platinum" ? "Eligible" : "Not eligible",
+        safetyStatus(operator)
+      ];
+    })
+  );
 }
 
 function paymentTable(rows, showActions = false) {
@@ -3301,10 +3401,17 @@ function cardPreview(operator, card) {
   const verifyUrl = `${appBaseUrl()}/?verify=${encodeURIComponent(token)}`;
   const memberPhoto = memberPhotoSrc(operator);
   const memberPhotoRef = operator.photoUrl || operator.photoData || "";
+  const category = operatorCategoryOf(operator);
+  const meta = categoryMeta(category);
+  const catClass = `card-cat-${meta.key}`;
   return `
     <div class="card-preview">
       <div class="card-stack">
-        <div class="id-card id-card-front plan-${escapeAttr(plan?.key || "regular")}" data-id-card style="--card-color:${plan?.color || "#10b91f"}">
+        <div class="id-card id-card-front ${catClass} plan-${escapeAttr(plan?.key || "regular")}" data-id-card data-card-category="${escapeAttr(category)}" style="--card-color:${plan?.color || "#10b91f"};--cat-color:${meta.accent};--cat-soft:${meta.accentSoft}">
+          <span class="card-category-band" data-card-band>
+            ${meta.key === "bicycle" ? iconBicycle() : iconMotorcycle()}
+            <span>${escapeHtml(meta.cardBand)}</span>
+          </span>
           <div class="id-card-top">
             <img src="./assets/macokasa-logo.png" alt="MACOKASA logo" />
             <div>
@@ -3328,6 +3435,7 @@ function cardPreview(operator, card) {
                 <div class="id-field"><span>District</span><strong data-card-district>${escapeHtml(operator.district)}</strong></div>
                 <div class="id-field"><span>Sex</span><strong data-card-sex>${escapeHtml(operator.sex || "Not recorded")}</strong></div>
               </div>
+              <div class="id-field id-vehicle-field"><span data-card-vehicle-label>${escapeHtml(meta.idLabel)}</span><strong data-card-vehicle>${escapeHtml(operator.licensePlate || "Not recorded")}</strong></div>
             </div>
             <a class="qr-link" href="${escapeAttr(verifyUrl)}" target="_blank" rel="noreferrer" aria-label="Scan MACOKASA card">
               <div class="qr-box" data-qr="${escapeAttr(verifyUrl)}">
@@ -3337,7 +3445,7 @@ function cardPreview(operator, card) {
             </a>
           </div>
         </div>
-        <div class="id-card id-card-back plan-${escapeAttr(plan?.key || "regular")}" style="--card-color:${plan?.color || "#10b91f"}">
+        <div class="id-card id-card-back ${catClass} plan-${escapeAttr(plan?.key || "regular")}" style="--card-color:${plan?.color || "#10b91f"};--cat-color:${meta.accent};--cat-soft:${meta.accentSoft}">
           <div class="id-card-back-head">
             <img src="./assets/macokasa-logo.png" alt="MACOKASA logo" />
             <div>
@@ -3348,6 +3456,10 @@ function cardPreview(operator, card) {
           <div class="back-message">
             <strong>This card is the property of MACOKASA.</strong>
             <p>If lost and found, return it to the nearest MACOKASA office, the chairperson of the Kabaza rank, or the nearest police unit.</p>
+          </div>
+          <div class="back-category">
+            ${meta.key === "bicycle" ? iconBicycle() : iconMotorcycle()}
+            <span>${escapeHtml(meta.cardBand)}</span>
           </div>
           <div class="back-strip">
             <span>${escapeHtml(operator.membershipNumber)}</span>
@@ -3394,11 +3506,28 @@ function updateCardPreviewFromForm() {
   if (!form || !card) return;
   const values = formValues(form);
   const plan = planByKey(values.cardPlan);
+  const meta = categoryMeta(values.cardCategory);
   document.querySelectorAll(".id-card-front, .id-card-back").forEach((node) => {
     node.style.setProperty("--card-color", plan?.color || "#10b91f");
-    node.classList.remove("plan-regular", "plan-silver", "plan-gold", "plan-platinum");
+    node.style.setProperty("--cat-color", meta.accent);
+    node.style.setProperty("--cat-soft", meta.accentSoft);
+    node.classList.remove(
+      "plan-regular", "plan-silver", "plan-gold", "plan-platinum",
+      "plan-pedal_regular", "plan-pedal_silver", "plan-pedal_gold"
+    );
     node.classList.add(`plan-${plan?.key || "regular"}`);
+    node.classList.remove("card-cat-motorcycle", "card-cat-bicycle");
+    node.classList.add(`card-cat-${meta.key}`);
+    node.dataset.cardCategory = normaliseCategory(values.cardCategory);
   });
+  document.querySelectorAll("[data-card-band]").forEach((node) => {
+    node.innerHTML = `${meta.key === "bicycle" ? iconBicycle() : iconMotorcycle()}<span>${escapeHtml(meta.cardBand)}</span>`;
+  });
+  document.querySelectorAll(".back-category").forEach((node) => {
+    node.innerHTML = `${meta.key === "bicycle" ? iconBicycle() : iconMotorcycle()}<span>${escapeHtml(meta.cardBand)}</span>`;
+  });
+  setText("[data-card-vehicle-label]", meta.idLabel);
+  setText("[data-card-vehicle]", values.cardVehicle || "Not recorded");
   setText("[data-card-plan-label]", plan?.name || "Member");
   setText("[data-card-name]", values.cardName || "Member name");
   setText("[data-card-number]", values.cardNumber || "MCK-0000");
@@ -3659,7 +3788,11 @@ function initials(name) {
 }
 
 function safetyStatus(operator) {
-  const safe = operator.hasLicense && operator.helmetUse && operator.passengerHelmet && operator.licensePlate;
+  // Compliance criteria differ by category: helmets and plates apply to
+  // motorcycles, reflectors and bicycle identification to pedal operators.
+  const safe = isPedal(operatorCategoryOf(operator))
+    ? Boolean(operator.reflectorFitted && operator.licensePlate)
+    : Boolean(operator.hasLicense && operator.helmetUse && operator.passengerHelmet && operator.licensePlate);
   return safe ? `<span class="status green">Safer rank ready</span>` : `<span class="status amber">Needs action</span>`;
 }
 
@@ -3914,4 +4047,79 @@ function renderTermsPage() {
       <button class="quiet-btn" type="button" data-section="public">Return to the website</button>
     </section>
   `;
+}
+
+/* ============================================================
+   Operator category — motorcycle (Kabaza) vs bicycle (pedal)
+   ============================================================ */
+
+const OPERATOR_CATEGORIES = {
+  "Motorcycle operator": {
+    key: "motorcycle",
+    code: "M",
+    short: "Motorcycle",
+    cardBand: "MOTORCYCLE TAXI",
+    vehicleNoun: "motorcycle",
+    idLabel: "Plate number",
+    accent: "#0f4a76",
+    accentSoft: "#e3f0fa"
+  },
+  "Bicycle operator": {
+    key: "bicycle",
+    code: "B",
+    short: "Bicycle",
+    cardBand: "PEDAL TAXI",
+    vehicleNoun: "bicycle",
+    idLabel: "Bicycle ID",
+    accent: "#0aa2c0",
+    accentSoft: "#e2f7fb"
+  }
+};
+
+function normaliseCategory(value) {
+  const raw = String(value || "").toLowerCase();
+  if (raw.includes("bicycle") || raw.includes("pedal")) return "Bicycle operator";
+  return "Motorcycle operator";
+}
+
+function isPedal(value) {
+  return normaliseCategory(value) === "Bicycle operator";
+}
+
+function categoryMeta(value) {
+  return OPERATOR_CATEGORIES[normaliseCategory(value)];
+}
+
+function operatorCategoryOf(operator) {
+  return normaliseCategory(operator?.operatorCategory);
+}
+
+/** Plans available to a given operator category. */
+function plansForCategory(category) {
+  const wanted = normaliseCategory(category);
+  const scoped = membershipPlans.filter(
+    (plan) => plan.audience === "Operator" && normaliseCategory(plan.category) === wanted
+  );
+  return scoped.length ? scoped : membershipPlans.filter((plan) => plan.audience === "Operator");
+}
+
+function planSelectForCategory(name, category, selected) {
+  const plans = plansForCategory(category);
+  const chosen = plans.some((plan) => plan.key === selected) ? selected : plans[0]?.key;
+  return `<select class="select-control" name="${name}">${plans
+    .map(
+      (plan) =>
+        `<option value="${plan.key}" ${plan.key === chosen ? "selected" : ""}>${escapeHtml(plan.name)} - ${money(plan.annualFee)}</option>`
+    )
+    .join("")}</select>`;
+}
+
+/** Category badge used in tables and lists. */
+function categoryBadge(category) {
+  const meta = categoryMeta(category);
+  return `<span class="category-badge cat-${meta.key}">${meta.key === "bicycle" ? iconBicycle() : iconMotorcycle()}<span>${escapeHtml(meta.short)}</span></span>`;
+}
+
+function iconBicycle() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.5" cy="17" r="3.5"/><circle cx="18.5" cy="17" r="3.5"/><path d="M5.5 17 9 8h5"/><path d="m12 17 3.5-9"/><path d="M9.5 8h5.5l3.5 9"/><path d="M14.5 5.5h2.5"/></svg>`;
 }

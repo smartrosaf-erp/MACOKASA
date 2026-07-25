@@ -37,6 +37,7 @@ export const membershipPlans = [
     key: "regular",
     name: "Regular",
     audience: "Operator",
+    category: "Motorcycle operator",
     annualFee: 15000,
     color: "#10b91f",
     benefits: ["National membership record", "Renewal reminders", "Public QR verification", "ROSAF training discount eligibility"]
@@ -45,6 +46,7 @@ export const membershipPlans = [
     key: "silver",
     name: "Silver",
     audience: "Operator",
+    category: "Motorcycle operator",
     annualFee: 30000,
     color: "#b8c0cc",
     benefits: ["All Regular benefits", "Priority ID card queue", "Safety compliance badge", "Owner matching visibility"]
@@ -53,6 +55,7 @@ export const membershipPlans = [
     key: "gold",
     name: "Gold",
     audience: "Operator",
+    category: "Motorcycle operator",
     annualFee: 55000,
     color: "#f4c400",
     benefits: ["All Silver benefits", "Reduced refresher training fees", "Rank promotion as safer operator", "Complaints resolution support"]
@@ -61,9 +64,37 @@ export const membershipPlans = [
     key: "platinum",
     name: "Platinum",
     audience: "Operator",
+    category: "Motorcycle operator",
     annualFee: 90000,
     color: "#e5e4e2",
     benefits: ["All Gold benefits", "Tracker installation eligibility", "Fleet-owner priority matching", "Premium digital profile"]
+  },
+  {
+    key: "pedal_regular",
+    name: "Pedal Regular",
+    audience: "Operator",
+    category: "Bicycle operator",
+    annualFee: 7500,
+    color: "#0aa2c0",
+    benefits: ["National membership record", "Renewal reminders", "Public QR verification", "Rank identification"]
+  },
+  {
+    key: "pedal_silver",
+    name: "Pedal Silver",
+    audience: "Operator",
+    category: "Bicycle operator",
+    annualFee: 15000,
+    color: "#7cc4d6",
+    benefits: ["All Pedal Regular benefits", "Priority ID card queue", "Reflector and safety kit eligibility", "Rank leadership visibility"]
+  },
+  {
+    key: "pedal_gold",
+    name: "Pedal Gold",
+    audience: "Operator",
+    category: "Bicycle operator",
+    annualFee: 27500,
+    color: "#f0a500",
+    benefits: ["All Pedal Silver benefits", "Road safety refresher priority", "Cooperative loan eligibility", "Complaints resolution support"]
   },
   {
     key: "owner_basic",
@@ -103,7 +134,7 @@ export const demoState = {
   operators: [
     {
       id: "op-001",
-      membershipNumber: "MCK-LL-2026-0001",
+      membershipNumber: "MCK-M-LL-2026-0001",
       fullName: "Joseph Banda",
       phone: "+265 991 230 111",
       email: "joseph.banda@example.com",
@@ -129,7 +160,7 @@ export const demoState = {
     },
     {
       id: "op-002",
-      membershipNumber: "MCK-BT-2026-0002",
+      membershipNumber: "MCK-B-BT-2026-0002",
       fullName: "Madalitso Jere",
       phone: "+265 888 450 222",
       email: "madalitso.jere@example.com",
@@ -138,16 +169,16 @@ export const demoState = {
       sex: "Female",
       district: "Blantyre",
       operatingArea: "Clock Tower",
-      membershipPlan: "regular",
+      membershipPlan: "pedal_silver",
       membershipType: "operator",
       expiresOn: "2026-07-08",
       hasLicense: false,
       licenseNumber: "",
-      ownershipStatus: "Owns motorcycle",
+      ownershipStatus: "Owns bicycle",
       motorcycleId: "bike-002",
       helmetUse: true,
       passengerHelmet: false,
-      licensePlate: "BT 3402",
+      licensePlate: "BIC-BT-3402",
       trackerInstalled: false,
       status: "training due",
       photoData: "",
@@ -250,7 +281,7 @@ export const demoState = {
       id: "pay-001",
       payerName: "Joseph Banda",
       payerType: "operator",
-      membershipNumber: "MCK-LL-2026-0001",
+      membershipNumber: "MCK-M-LL-2026-0001",
       method: "AirtelMoney",
       amount: 55000,
       purpose: "Gold annual subscription",
@@ -263,7 +294,7 @@ export const demoState = {
       id: "pay-002",
       payerName: "Madalitso Jere",
       payerType: "operator",
-      membershipNumber: "MCK-BT-2026-0002",
+      membershipNumber: "MCK-B-BT-2026-0002",
       method: "Cash",
       amount: 15000,
       purpose: "Regular annual subscription",

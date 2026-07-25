@@ -141,3 +141,36 @@ on cash reconciliation.
 | P2-7 | Analytics and uptime monitoring not configured. | MACOKASA |
 | — | Legal pages need review by a Malawian legal advisor. | MACOKASA |
 | — | SMS / WhatsApp / email providers not contracted; reminders do not send. | MACOKASA |
+
+
+---
+
+## Change log — operator categories, 2026-07-25
+
+Bicycle (pedal) and motorcycle operators are now first-class distinct
+categories rather than a cosmetic dropdown value.
+
+**Data model**
+- Three pedal membership plans added at roughly half the motorcycle rate:
+  Pedal Regular K7,500 / Pedal Silver K15,000 / Pedal Gold K27,500.
+- Every operator plan now declares a `category`.
+- Membership numbers encode the category: `MCK-M-...` / `MCK-B-...`.
+  Sequence is counted per category so the series never collide.
+- Card numbers follow the same scheme: `CARD-M-0001` / `CARD-B-0001`.
+
+**Corrections to existing behaviour**
+- `safetyStatus()` previously required a helmet and plate for every operator,
+  so a bicycle operator could never reach "Safer rank ready". Pedal operators
+  are now assessed on reflector and bicycle identification.
+- The demo bicycle operator was recorded as owning a motorcycle, on a
+  motorcycle plan, with a motorcycle plate. Corrected.
+- The registration form asked bicycle operators for a driving licence,
+  plate, and tracker. It now adapts to the selected category.
+
+**ID cards** — visually distinct at arm's length: coloured spine, diagonal
+`PEDAL TAXI` / `MOTORCYCLE TAXI` corner band with vehicle icon, category
+background texture, vehicle identifier row labelled appropriately, and a
+category strip on the reverse. Colours are print-exact.
+
+**Tests** — `tests/category.test.mjs`, 13 assertion groups, wired into
+`npm run verify` and CI.

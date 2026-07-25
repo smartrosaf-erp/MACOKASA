@@ -5242,3 +5242,233 @@ body.is-offline::before {
   .demo-banner { margin-inline: -14px; padding-inline: 14px; }
   .public-footer-legal span { margin-left: 0; width: 100%; }
 }
+
+/* ============================================================
+   Operator category — motorcycle (Kabaza) vs bicycle (pedal)
+   Cards must be distinguishable at arm's length by police,
+   passengers, and rank marshals.
+   ============================================================ */
+
+/* ---- Registration category chooser ---- */
+
+.category-chooser {
+  border: 1px solid rgba(4, 24, 44, 0.1);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin: 0 0 6px;
+  background: linear-gradient(180deg, #fbfdff, #f3f7fb);
+}
+
+.category-chooser legend {
+  padding: 0 8px;
+  font-weight: 800;
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brand-700);
+}
+
+.category-chooser .microcopy { margin: 0 0 14px; }
+
+.category-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.category-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  text-align: left;
+  border-radius: var(--radius);
+  border: 2px solid rgba(4, 24, 44, 0.12);
+  background: #fff;
+  transition: transform 0.22s var(--ease), border-color 0.22s var(--ease), box-shadow 0.22s var(--ease);
+}
+
+.category-option:hover { transform: translateY(-3px); box-shadow: var(--e2); }
+
+.category-option-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: #eef3f8;
+  color: #47607a;
+  transition: background 0.22s var(--ease), color 0.22s var(--ease);
+}
+
+.category-option-icon svg { width: 28px; height: 28px; }
+
+.category-option-copy { display: grid; gap: 3px; }
+.category-option-copy strong { font-size: 1rem; line-height: 1.2; }
+.category-option-copy small { color: var(--muted); font-size: 0.8rem; line-height: 1.4; }
+
+.category-option.is-motor.is-selected {
+  border-color: #0f4a76;
+  box-shadow: 0 0 0 4px rgba(15, 74, 118, 0.12);
+}
+
+.category-option.is-motor.is-selected .category-option-icon {
+  background: #e3f0fa;
+  color: #0f4a76;
+}
+
+.category-option.is-pedal.is-selected {
+  border-color: #0aa2c0;
+  box-shadow: 0 0 0 4px rgba(10, 162, 192, 0.14);
+}
+
+.category-option.is-pedal.is-selected .category-option-icon {
+  background: #e2f7fb;
+  color: #0aa2c0;
+}
+
+/* ---- Category badge for tables and lists ---- */
+
+.category-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.76rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.category-badge svg { width: 16px; height: 16px; }
+
+.category-badge.cat-motorcycle {
+  background: #e3f0fa;
+  border-color: #b9d8ee;
+  color: #0f4a76;
+}
+
+.category-badge.cat-bicycle {
+  background: #e2f7fb;
+  border-color: #b3e6ef;
+  color: #05798f;
+}
+
+.na-cell { opacity: 0.45; }
+
+/* ---- ID card category identity ---- */
+
+.id-card {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Coloured spine down the left edge — visible even in a wallet */
+.id-card-front.card-cat-motorcycle::before,
+.id-card-front.card-cat-bicycle::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  background: linear-gradient(180deg, var(--cat-color), color-mix(in srgb, var(--cat-color) 55%, #000));
+  z-index: 3;
+}
+
+/* The category band — the primary at-a-glance differentiator */
+.card-category-band {
+  position: absolute;
+  z-index: 4;
+  top: 14px;
+  right: -42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 190px;
+  padding: 6px 46px 6px 20px;
+  background: var(--cat-color);
+  color: #fff;
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  transform: rotate(38deg);
+  transform-origin: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+
+.card-category-band svg { width: 15px; height: 15px; flex: 0 0 auto; }
+
+/* Distinct background treatment per category */
+.id-card-front.card-cat-motorcycle {
+  background-image:
+    radial-gradient(420px 200px at 100% 0%, color-mix(in srgb, var(--cat-color) 22%, transparent), transparent 70%),
+    repeating-linear-gradient(135deg, rgba(15, 74, 118, 0.05) 0 12px, transparent 12px 24px);
+}
+
+.id-card-front.card-cat-bicycle {
+  background-image:
+    radial-gradient(420px 200px at 100% 0%, color-mix(in srgb, var(--cat-color) 24%, transparent), transparent 70%),
+    repeating-linear-gradient(45deg, rgba(10, 162, 192, 0.06) 0 10px, transparent 10px 20px);
+}
+
+/* Vehicle identifier row */
+.id-vehicle-field {
+  margin-top: 6px;
+  padding-top: 7px;
+  border-top: 1px dashed rgba(4, 24, 44, 0.18);
+}
+
+.id-vehicle-field strong {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+/* Back of card category strip */
+.back-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  align-self: flex-start;
+  margin-top: 10px;
+  padding: 7px 15px;
+  border-radius: 999px;
+  background: var(--cat-soft);
+  border: 1px solid color-mix(in srgb, var(--cat-color) 34%, transparent);
+  color: var(--cat-color);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.back-category svg { width: 16px; height: 16px; }
+
+.id-card-back.card-cat-motorcycle,
+.id-card-back.card-cat-bicycle {
+  border-top: 4px solid var(--cat-color);
+}
+
+/* Print: keep category colour, it is the point of the design */
+@media print {
+  .card-category-band,
+  .id-card-front.card-cat-motorcycle::before,
+  .id-card-front.card-cat-bicycle::before,
+  .back-category {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+@media (max-width: 720px) {
+  .category-options { grid-template-columns: 1fr; }
+  .card-category-band {
+    min-width: 168px;
+    font-size: 0.58rem;
+    padding: 5px 42px 5px 16px;
+  }
+}

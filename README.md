@@ -29,6 +29,9 @@ generates `public/config.js`. Both are gitignored — never edit files under
 npm run build     # generates public/config.js and copies src -> public/src
 npm run dev       # serves http://127.0.0.1:4177/
 npm run check     # syntax validation
+npm test          # operator category logic tests
+npm run security  # secret / PCI / RLS scan
+npm run verify    # all of the above
 ```
 
 Without `SUPABASE_URL` and `SUPABASE_ANON_KEY` the app runs on demonstration
@@ -62,6 +65,30 @@ Read this before changing anything that touches data.
   detected in the environment.
 
 ---
+
+## Operator categories
+
+MACOKASA registers two distinct kinds of taxi operator. They are modelled
+separately throughout — fees, compliance criteria, membership numbering, and
+ID card design.
+
+| | Motorcycle operator | Bicycle operator (pedal) |
+|---|---|---|
+| Code | `M` | `B` |
+| Membership no. | `MCK-M-LL-2026-0001` | `MCK-B-BT-2026-0001` |
+| Plans | Regular / Silver / Gold / Platinum | Pedal Regular / Silver / Gold |
+| Entry fee | K15,000 | K7,500 |
+| Card band | `MOTORCYCLE TAXI`, navy | `PEDAL TAXI`, cyan |
+| Vehicle field | Plate number | Bicycle ID |
+| Compliance | Driving licence, rider + passenger helmet, tracker | Reflector, training record, bicycle ID |
+
+Sequence numbers are counted per category, so the two series never collide.
+Membership plans are constrained to the operator's category at both
+registration and card design — a pedal operator cannot be placed on a
+motorcycle plan.
+
+To add a category, extend `OPERATOR_CATEGORIES` in `src/app.js` and add plans
+with a matching `category` field in `src/data.js`.
 
 ## Documentation
 
@@ -105,4 +132,4 @@ Tracked in `AUDIT.md`. The significant ones:
 - SMS / WhatsApp / email delivery not contracted.
 - Some organisation contact details are still placeholders.
 - Legal pages require review by a Malawian legal advisor.
-- No automated test suite yet.
+- Test coverage is limited to operator category logic.
