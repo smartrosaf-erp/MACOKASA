@@ -1,52 +1,72 @@
-# Design language
+# Design language — "Sunrise on the road"
 
-MACOKASA uses the **Quick-Think Solution** design language, so every
-product in the group reads as one family. Tokens are taken from
-quickthinks.com rather than invented.
+MACOKASA has its own identity, drawn from the Malawi flag: a rising sun
+over a dark horizon, with the flag's green and crimson as support. It
+stays in the Quick-Think family through the gold accent and tight
+geometry, but it is unmistakably MACOKASA rather than a recolour of the
+parent brand.
 
 ## Palette
 
-| Token | Value | Used for |
+| Token | Value | Meaning |
 |---|---|---|
-| `--navy` | `#08213d` | Sidebar, headings, motorist identity |
-| `--navy-2` | `#06172c` | Sidebar gradient base |
-| `--gold` | `#efb904` | **The single call to action on any screen** |
-| `--green` | `#16875f` | Success, MACOKASA share, eyebrows |
-| `--sky` | `#2f9fd3` | Focus rings, pedalist identity, information |
-| `--red` | `#d64545` | Refusals and overdue amounts |
-| `--graphite` | `#263238` | Body text |
-| `--cloud` / `--ice` | `#f5f8fb` / `#f8fbfd` | Canvas and table headers |
-| `--crystal` | `rgba(255,255,255,.72)` | Glass surfaces |
+| `--ink` | `#101a17` | The horizon. Sidebar, headings, motorist identity |
+| `--forest` | `#0d5c3f` | Malawi green. Success, money, primary confirmation |
+| `--sun` | `#f5a524` | The rising sun. **The single call to action** |
+| `--crimson` | `#c1272d` | Flag red. Refusals, overdue, danger only |
+| `--sky` | `#2e7d9a` | Information, pedalist identity |
+| `--canvas` | `#f7f6f2` | Warm parchment, not cold grey |
 
-Type is **Segoe UI**, matching the marketing site. No webfont is loaded,
-so the platform renders instantly on a weak connection.
+The canvas is deliberately warm. Malawi is not a blue-grey country and
+the product should not feel like a northern-hemisphere SaaS dashboard.
+
+## Type
+
+- **Fraunces** for display — a soft serif with optical sizing. It gives
+  headlines and large figures a human, editorial weight that a grotesk
+  cannot.
+- **Plus Jakarta Sans** for interface — open, legible at small sizes,
+  and it renders well on the low-end Android devices clerks use.
+
+Large numerals are set in Fraunces so a dashboard reads like a report
+rather than a spreadsheet.
 
 ## Rules
 
-1. **Gold means act.** One gold button per view: Sign in, Print, Confirm,
-   Save. Everything else is ghost or navy. If two golds appear, one is wrong.
-2. **Green is money and success**, never an action.
-3. **Sky is information and focus**, never an action.
-4. **Radii are tight** — 6/8/14px, matching the site's `--radius: 8px`.
-   Rounded-everything reads as consumer software, not an operations tool.
-5. **Shadows are soft and wide**, `0 18px 42px rgba(8,33,61,.055)`.
-   Depth comes from layering glass, not from dark drop shadows.
-6. **Eyebrows are green, uppercase, 0.16em tracked**, exactly as on
-   the marketing site's section headers.
-7. **Currency at large sizes** uses `moneyRich()`: the symbol is set
-   small and muted so the numeral carries the weight.
+1. **Sun means act.** One gold button per view. Everything else is
+   ghost, ink or forest.
+2. **Forest means money and success**, never an action.
+3. **Sky means information**, never an action.
+4. **Crimson is only ever a refusal**, never decoration.
+5. Radii step 6 / 10 / 14 / 20 / 28. Cards and modals sit at the
+   generous end, controls at the tight end.
+6. Depth is soft and wide, never a hard drop shadow.
+7. Eyebrows are forest, uppercase, 0.18em tracked, with a two-tone rule.
+
+## Two faces, one product
+
+**The public website** is the outward face: what MACOKASA is, how to
+join, what it costs, and how to verify a card. Editorial layout, large
+imagery, generous whitespace, scroll-reveal.
+
+**The operations platform** sits behind a staff sign-in at `?portal=1`.
+Denser, calmer, built for a clerk working through a queue. It shares the
+palette and type so the two read as one organisation.
+
+There is a single discreet "Staff portal" link on the website. The ERP
+is never advertised to members.
 
 ## Category identity
 
-Motorists carry **navy**, pedalists carry **sky**. This runs through
-badges, choice cards, the ID card spine, the corner ribbon and the
+Motorists carry deep **navy-ink**, pedalists carry **teal**. This runs
+through badges, choice cards, the ID card spine, corner ribbon and
 background texture, so the two are separable at a glance and in print.
 
-## Accessibility
+## Guards
 
-- Focus rings are 2px sky at 2px offset, never removed.
-- Motion honours `prefers-reduced-motion`.
-- Icons are explicitly sized; an automated check fails the build if any
-  icon renders above 60px, because inline SVGs have no intrinsic size
-  and silently expand to fill their container.
-- Text is never clipped: a check asserts no element overflows its box.
+Automated checks fail the build if:
+- any icon renders above 60px (inline SVGs have no intrinsic size and
+  silently expand to fill their container)
+- any text is clipped by its container
+- the page scrolls horizontally
+- the site hardcodes a fee amount instead of reading configuration

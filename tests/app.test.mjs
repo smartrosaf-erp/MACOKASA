@@ -317,4 +317,53 @@ test("toasts announce politely", () => {
   assert.match(comp, /aria-live", "polite/);
 });
 
+/* ---------------- Public website ---------------- */
+
+console.log("\nPublic website");
+
+const site = read("screens/site.js");
+
+test("the site renders before any authentication", () => {
+  assert.match(app, /let view = "site"/);
+  assert.match(app, /if \(view === "site"\) return showSite\(\)/);
+});
+
+test("view is declared before init runs", () => {
+  // A temporal dead zone here crashes the whole app on load.
+  const declIndex = app.indexOf('let view = "site"');
+  const initCall = app.indexOf("\ninit();");
+  assert.ok(declIndex > -1, "view is not declared");
+  assert.ok(initCall === -1 || declIndex < initCall, "view must be declared before init() is called");
+});
+
+test("the site offers a portal route and a verification route", () => {
+  assert.match(site, /data-open-portal/);
+  assert.match(site, /data-verify-form/);
+});
+
+test("pricing is driven by configured fees, never hardcoded", () => {
+  assert.ok(!/\b(15000|7500|25000|45000)\b/.test(site), "site must not hardcode fee amounts");
+  assert.match(app, /function publicTiers/);
+});
+
+test("the site never claims figures it cannot prove", () => {
+  // Guard against invented member counts in marketing copy.
+  assert.ok(!/[0-9],[0-9]{3}\+? (members|operators|riders)/i.test(site));
+});
+
+test("hidden beats display so only one tier panel shows", () => {
+  assert.match(css, /\[hidden\] \{ display: none !important; \}/);
+});
+
+test("the burger only appears once the nav collapses", () => {
+  assert.match(css, /\.burger \{ display: none !important; \}/);
+  assert.match(css, /\.burger \{ display: inline-flex !important; \}/);
+});
+
+test("site sections carry the ids the nav links to", () => {
+  for (const id of ["what", "how", "owners", "fees", "verify"]) {
+    assert.ok(site.includes(`id="${id}"`), `missing section #${id}`);
+  }
+});
+
 console.log(`\n${passed} assertion group(s) passed.\n`);

@@ -1,7 +1,11 @@
-# MACOKASA — Operations Platform
+# MACOKASA
 
-The national register of Malawi Kabaza taxi operators: membership,
-identity cards, fleet management and finance.
+The national register of Malawi Kabaza taxi operators — a public
+website and an operations platform, sharing one identity.
+
+**Public site** at `/` — what MACOKASA is, how to join, fees, and public
+card verification.
+**Operations platform** at `/?portal=1` — staff only, behind sign-in.
 
 MACOKASA is **tenant #2** on the Quick-Think Solution multi-tenant
 platform, alongside SmartROSAF. One codebase, one Supabase project, many

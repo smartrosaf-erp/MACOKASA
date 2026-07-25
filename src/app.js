@@ -19,6 +19,7 @@ import * as cards from "./screens/cards.js";
 import * as finance from "./screens/finance.js";
 import * as fleet from "./screens/fleet.js";
 import * as settings from "./screens/settings.js";
+import { renderSite, bindSite } from "./screens/site.js";
 
 const root = document.querySelector("#app");
 
@@ -97,6 +98,8 @@ const NAV_GROUPS = [
 let current = "dashboard";
 let sidebarOpen = false;
 let booting = true;
+/** Which face of the product is showing: the public site or the ERP. */
+let view = "site";
 
 /* ---------------- Boot ---------------- */
 
@@ -104,28 +107,81 @@ init();
 
 async function init() {
   installErrorHandling();
-  paint(shell(loading("Starting MACOKASA…")));
 
-  // Public card verification runs before any authentication.
-  const token = new URLSearchParams(window.location.search).get("verify");
-  if (token) return renderVerification(token);
+  const params = new URLSearchParams(window.location.search);
 
-  if (!api.isConfigured()) {
-    paint(notConfigured());
+  // Public card verification runs before anything else.
+  const token = params.get("verify");
+  if (token) {
     booting = false;
-    return;
+    if (api.isConfigured()) {
+      try { await api.initClient(); } catch (error) { console.error(error); }
+    }
+    return renderVerification(token);
   }
 
-  try {
-    await api.initClient();
-    await api.restoreSession();
-  } catch (error) {
-    console.error(error);
+  if (params.get("portal") === "1" || window.location.hash === "#portal") view = "portal";
+
+  if (api.isConfigured()) {
+    try {
+      await api.initClient();
+      await api.restoreSession();
+    } catch (error) {
+      console.error(error);
+    }
   }
+
+  // A restored session lands straight in the workspace.
+  if (api.state.profile) view = "portal";
 
   booting = false;
   applyTenantFormatting();
   await route();
+}
+
+async function showSite() {
+  const tiers = await publicTiers();
+  paint(renderSite({ tiers }));
+  bindSite(document.querySelector("#app"), {
+    onPortal: () => {
+      view = "portal";
+      void route();
+      window.scrollTo({ top: 0 });
+    },
+    onVerify: (token) => renderVerification(token)
+  });
+}
+
+/**
+ * Fee tiers for the public pricing table. Falls back to nothing rather
+ * than inventing figures if the database is unreachable.
+ */
+async function publicTiers() {
+  try {
+    if (!api.state.client && !api.DEMO) return [];
+    const [packages, fees] = await Promise.all([api.listPackages(), api.listPackageFees()]);
+    const withBenefits = await Promise.all(
+      packages
+        .filter((p) => p.applies_to === "operator")
+        .map(async (p) => {
+          const fee = fees.find((f) => f.package_id === p.id && f.fee_type === "registration");
+          const card = fees.find((f) => f.package_id === p.id && f.fee_type === "card");
+          const benefits = await api.listPackageBenefits(p.id).catch(() => []);
+          return {
+            id: p.id,
+            name: p.name,
+            operator_type: p.operator_type,
+            rank: p.rank,
+            fee: Number(fee?.amount || 0) + Number(card?.amount || 0),
+            benefits: benefits.map((b) => b.benefit)
+          };
+        })
+    );
+    return withBenefits.sort((a, b) => a.rank - b.rank);
+  } catch (error) {
+    console.error(error);
+    return [];
+  }
 }
 
 function applyTenantFormatting() {
@@ -144,6 +200,8 @@ function allowedScreens() {
 }
 
 async function route(opts = {}) {
+  if (view === "site") return showSite();
+  if (!api.isConfigured()) return paint(notConfigured());
   if (!api.state.profile) return paint(signInScreen());
 
   const allowed = allowedScreens().map(([k]) => k);
@@ -353,6 +411,9 @@ function signInScreen() {
           ${signingIn ? "Signing in…" : "Sign in"}
         </button>
         <button class="btn btn-ghost btn-block" type="button" data-act="reset">Forgot password</button>
+        <button class="btn btn-ghost btn-block" type="button" data-act="back-to-site">
+          ${icon("arrowLeft")} Back to the website
+        </button>
 
         ${api.DEMO ? demoRoleChooser() : ""}
 
@@ -450,6 +511,9 @@ function verificationCard(r, errorMessage) {
           <p style="color:var(--muted)">
             ${esc(errorMessage || "This QR code does not match any MACOKASA membership card.")}
           </p>
+          <button class="btn btn-ghost btn-sm" style="margin-top:18px" type="button" data-act="site-home">
+            ${icon("arrowLeft")} MACOKASA website
+          </button>
         </div>
       </div>
     `;
@@ -474,9 +538,12 @@ function verificationCard(r, errorMessage) {
           <dt>District</dt><dd>${esc(r.district || "—")}</dd>
           <dt>Valid to</dt><dd>${esc(r.expires_on || "—")}</dd>
         </dl>
-        <p class="hint" style="margin-top:20px">
+        <p class="hint" style="margin-top:20px;color:var(--muted);font-size:0.82rem">
           Verified against the MACOKASA national register.
         </p>
+        <button class="btn btn-ghost btn-sm" style="margin-top:18px" type="button" data-act="site-home">
+          ${icon("arrowLeft")} MACOKASA website
+        </button>
       </div>
     </div>
   `;
@@ -520,7 +587,25 @@ document.addEventListener("click", async (event) => {
   if (act === "signout") {
     await api.signOut();
     current = "dashboard";
+    view = "site";
     notify.info("Signed out.");
+    void route();
+    window.scrollTo({ top: 0 });
+    return;
+  }
+
+  if (act === "back-to-site") {
+    view = "site";
+    void route();
+    window.scrollTo({ top: 0 });
+    return;
+  }
+
+  if (act === "site-home") {
+    view = "site";
+    const url = new URL(window.location.href);
+    url.searchParams.delete("verify");
+    window.history.replaceState({}, "", url);
     void route();
     return;
   }
