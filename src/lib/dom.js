@@ -37,15 +37,44 @@ export function $$(selector, root = document) {
   return [...root.querySelectorAll(selector)];
 }
 
-export function formData(form) {
+/**
+ * Read named controls from a form OR any container.
+ *
+ * Much of the interface groups fields in a div rather than a form, so
+ * this must not depend on FormData, which throws on anything that is
+ * not an HTMLFormElement.
+ */
+export function formData(root) {
   const out = {};
-  new FormData(form).forEach((value, key) => {
+  if (!root) return out;
+
+  const add = (key, value) => {
+    if (!key) return;
     if (key in out) {
       out[key] = Array.isArray(out[key]) ? [...out[key], value] : [out[key], value];
     } else {
       out[key] = value;
     }
+  };
+
+  root.querySelectorAll("input[name], select[name], textarea[name]").forEach((el) => {
+    if (el.disabled) return;
+    if (el.type === "checkbox") {
+      add(el.name, el.checked);
+      return;
+    }
+    if (el.type === "radio") {
+      if (el.checked) add(el.name, el.value);
+      return;
+    }
+    if (el.type === "file") return;
+    if (el.multiple && el.tagName === "SELECT") {
+      add(el.name, [...el.selectedOptions].map((o) => o.value));
+      return;
+    }
+    add(el.name, el.value);
   });
+
   return out;
 }
 

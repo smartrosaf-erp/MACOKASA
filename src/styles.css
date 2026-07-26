@@ -1399,3 +1399,52 @@ table.data td.actions { text-align: right; white-space: nowrap; }
   [data-reveal] { opacity: 1; transform: none; }
   html { scroll-behavior: auto; }
 }
+
+/* ============================================================
+   Tenant configuration screens
+   ============================================================ */
+
+.input-inline, .select-inline { min-height: 38px; padding: 7px 11px; font-size: 0.85rem; }
+.select-inline { text-transform: capitalize; }
+
+.colour-well {
+  width: 46px; min-height: 46px; flex: 0 0 auto;
+  padding: 3px; border: 1px solid var(--hairline-2);
+  border-radius: var(--r-sm); background: var(--paper); cursor: pointer;
+}
+
+.brand-preview {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.bp-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 16px;
+  background: var(--ink); color: #fff;
+}
+.bp-dot { width: 22px; height: 22px; border-radius: 5px; background: var(--sun); flex: 0 0 auto; }
+.bp-bar strong { font-family: var(--display); font-size: 0.98rem; }
+
+.bp-body { padding: 18px 16px; display: grid; gap: 14px; }
+.bp-eyebrow {
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--forest);
+}
+.bp-buttons { display: flex; gap: 9px; flex-wrap: wrap; }
+.bp-btn { padding: 9px 17px; border-radius: 4px; font-size: 0.82rem; font-weight: 600; }
+.bp-btn.primary { background: var(--forest); color: #fff; }
+.bp-btn.ghost { border: 1px solid var(--hairline-2); color: var(--ink); }
+.bp-swatches { display: flex; gap: 8px; }
+.bp-swatches span {
+  width: 34px; height: 34px; border-radius: 5px;
+  border: 1px solid var(--hairline);
+}
+
+code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.86em; padding: 1px 6px; border-radius: 3px;
+  background: var(--canvas-2); color: var(--ink);
+}

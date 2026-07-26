@@ -196,14 +196,42 @@ exception, not the pattern, and it should be sold as such.
 
 ---
 
-## Practical sequence
+## Configuring a tenant, in practice
 
-1. Apply `0005_tenant_extensibility.sql` (staging first, as always).
-2. Wire branding into the client. Immediate visible win, low risk.
-3. Wire terminology. Low risk, high perceived tailoring.
-4. Wire field configuration into the registration wizard.
-5. Wire custom fields.
-6. Only then consider a second vertical module set.
+An administrator does all of this in **Settings**. No SQL, no deploy,
+no developer.
 
-Do them in that order. Each is independently useful, and stopping after
-any one of them leaves a working system.
+| Tab | What it changes |
+|---|---|
+| **Branding** | Display name, tagline, logo, and the three brand colours. A live preview applies them to the whole interface before you save. |
+| **Terminology** | Your word for member, operator, owner, vehicle, card, rank, district, package and organisation. |
+| **Fields** | Each standard field set to hidden, optional, required or read-only, with your own label. Below that, add fields the system has never heard of. |
+| **Workflow** | Whether a clerk may confirm their own collection, whether large payments need a second approval and above what amount, who may authorise a card reprint, how the print queue sorts, and the remittance variance tolerated. |
+
+Two safeguards are built in:
+
+- **Retiring a custom field never deletes it.** The definition is
+  deactivated so values already captured stay readable.
+- **Weakening a money control asks you to confirm.** Allowing a clerk
+  to confirm their own collection, or verify their own remittance,
+  requires an explicit acceptance and is written to the configuration
+  history against your name.
+
+### Onboarding a new tenant
+
+1. Insert the tenant row and enable its modules.
+2. Create their administrator and grant `tenant_admin`.
+3. Hand them the Settings screen.
+
+Steps 1 and 2 are SQL. Step 3 is the client tailoring their own system.
+
+## Build sequence, for reference
+
+1. `0005_tenant_extensibility.sql` — the seams. **Done.**
+2. Branding applied at run time. **Done.**
+3. Terminology through `t()`. **Done.**
+4. Field configuration in the registration wizard. **Done.**
+5. Custom fields rendered, validated, stored. **Done.**
+6. Settings UI so administrators do all of it themselves. **Done.**
+7. A second vertical module set — only when a client in that vertical
+   is paying for it.
