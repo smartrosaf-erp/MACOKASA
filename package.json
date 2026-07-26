@@ -6,9 +6,15 @@
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
     "build": "node scripts/write-config.mjs",
-    "check": "node --check src/app.js && node --check src/data.js && node --check scripts/dev-server.mjs && node --check scripts/write-config.mjs && node --check scripts/security-check.mjs",
+    "check": "node scripts/syntax-check.mjs",
+    "sqlcheck": "python3 scripts/validate-sql.py",
     "security": "node scripts/security-check.mjs",
-    "verify": "npm run check && npm run build && npm run security && npm test",
-    "test": "node tests/category.test.mjs"
+    "test": "node tests/finance.test.mjs && node tests/app.test.mjs",
+    "verify": "npm run check && npm run build && npm run security && npm test && npm run workflow",
+    "bootcheck": "node scripts/boot-check.mjs",
+    "workflow": "node workflow-check.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.0"
   }
 }
