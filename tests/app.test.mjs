@@ -398,4 +398,75 @@ test("the display face is an editorial serif", () => {
   assert.match(css, /--sans: "Inter"/);
 });
 
+/* ---------------- Multi-tenant adoption ---------------- */
+
+console.log("\nAdoption into the shared project");
+
+const preflight = readFileSync(new URL("../supabase/migrations/0000_preflight_inspect.sql", import.meta.url), "utf8");
+const adopt = readFileSync(new URL("../supabase/migrations/0001a_adopt_existing_profiles.sql", import.meta.url), "utf8");
+const workflow2 = readFileSync(new URL("../supabase/migrations/0004_workflow_and_config.sql", import.meta.url), "utf8");
+
+test("preflight only reads, never writes", () => {
+  for (const verb of ["insert into", "update ", "delete from", "drop ", "alter table", "create table"]) {
+    assert.ok(!new RegExp(`\\n\\s*${verb}`, "i").test(preflight),
+      `preflight must not contain "${verb.trim()}"`);
+  }
+});
+
+test("adoption extends profiles instead of replacing it", () => {
+  assert.ok(!/drop table[^\n]*profiles/i.test(adopt), "must never drop profiles");
+  assert.match(adopt, /alter table public\.profiles\s+add column if not exists tenant_id/);
+  assert.match(adopt, /add column if not exists platform_role/);
+});
+
+test("adoption keeps the platform role separate from any existing role column", () => {
+  assert.match(adopt, /platform_role public\.platform_role/);
+  // It must not redefine or overwrite a pre-existing `role` column.
+  assert.ok(!/alter table public\.profiles[\s\S]{0,80}add column if not exists role\b/.test(adopt));
+});
+
+test("existing users are assigned to the ROSAF tenant, not orphaned", () => {
+  assert.match(adopt, /update public\.profiles[\s\S]{0,160}slug = 'smartrosaf'/);
+});
+
+test("adoption never enables RLS on a table it did not create", () => {
+  const created = [...adopt.matchAll(/create table if not exists public\.(\w+)/g)].map((m) => m[1]);
+  const rlsOn = [...adopt.matchAll(/alter table public\.(\w+) enable row level security/g)].map((m) => m[1]);
+  for (const t of rlsOn) {
+    // profiles is the one exception: policies are additive and named distinctly.
+    if (t === "profiles") continue;
+    assert.ok(created.includes(t), `enables RLS on ${t}, which it did not create`);
+  }
+});
+
+test("shared infrastructure is namespaced to avoid ROSAF collisions", () => {
+  assert.match(adopt, /create table if not exists public\.platform_audit_log/);
+  assert.match(adopt, /create table if not exists public\.platform_notifications/);
+});
+
+test("notifications route to whichever table exists", () => {
+  assert.match(workflow2, /function public\.queue_notification/);
+  assert.match(workflow2, /to_regclass\('public\.platform_notifications'\)/);
+  // Only the router itself may touch a bare notifications table; the
+  // workflow functions must go through queue_notification().
+  const router = workflow2.slice(
+    workflow2.indexOf("function public.queue_notification"),
+    workflow2.indexOf("function public.confirm_payment")
+  );
+  const outside = workflow2.replace(router, "");
+  assert.ok(!/insert into public\.notifications/.test(outside),
+    "a workflow function inserts directly instead of using queue_notification()");
+  assert.match(workflow2, /perform public\.queue_notification/);
+});
+
+test("the client reads platform_role with a fallback to role", () => {
+  assert.match(api, /platform_role/);
+  assert.match(api, /role: adopted\.data\.platform_role/);
+});
+
+test("both tenants are seeded", () => {
+  assert.match(adopt, /'smartrosaf'/);
+  assert.match(adopt, /'macokasa'/);
+});
+
 console.log(`\n${passed} assertion group(s) passed.\n`);

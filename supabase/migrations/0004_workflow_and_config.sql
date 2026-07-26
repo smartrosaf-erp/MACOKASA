@@ -1,5 +1,11 @@
 -- ============================================================
 -- 0004_workflow_and_config.sql
+--
+-- Notification inserts route through queue_notification(), which
+-- writes to platform_notifications when the adoption path was used
+-- (0001a) and to notifications otherwise (0001). This keeps a single
+-- migration working on both a fresh project and one already hosting
+-- SmartROSAF.
 -- Registration → payment → card → print → notify workflow,
 -- public verification, and seed configuration.
 --
@@ -10,6 +16,40 @@
 -- Confirm a payment: post the ledger, activate the membership,
 -- and move the card to the print queue. One transaction.
 -- ------------------------------------------------------------
+
+/**
+ * Writes to whichever notification table this project has.
+ * 0001 creates public.notifications; 0001a creates
+ * public.platform_notifications to avoid colliding with a table
+ * SmartROSAF may already own.
+ */
+create or replace function public.queue_notification(
+  p_tenant uuid,
+  p_channel text,
+  p_recipient text,
+  p_recipient_user uuid,
+  p_subject text,
+  p_body text,
+  p_template text,
+  p_context jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if to_regclass('public.platform_notifications') is not null then
+    insert into public.platform_notifications
+      (tenant_id, channel, recipient, recipient_user, subject, body, template_key, context)
+    values (p_tenant, p_channel, p_recipient, p_recipient_user, p_subject, p_body, p_template, p_context);
+  elsif to_regclass('public.notifications') is not null then
+    insert into public.notifications
+      (tenant_id, channel, recipient, recipient_user, subject, body, template_key, context)
+    values (p_tenant, p_channel, p_recipient, p_recipient_user, p_subject, p_body, p_template, p_context);
+  end if;
+end;
+$$;
 
 create or replace function public.confirm_payment(p_payment uuid)
 returns void
@@ -127,18 +167,15 @@ begin
   );
 
   -- Member alert
-  insert into public.notifications (tenant_id, channel, recipient, subject, body, template_key, context)
-  values (
-    c.tenant_id, 'sms', mem.phone, 'ID card printed', msg, 'card_printed',
+  perform public.queue_notification(
+    c.tenant_id, 'sms', mem.phone, null, 'ID card printed', msg, 'card_printed',
     jsonb_build_object('cardId', c.id, 'memberId', mem.id, 'membershipNo', mem.membership_no)
   );
 
   -- Clerk alert
   if c.dispatch_to_clerk is not null then
     select email into clerk_email from auth.users where id = c.dispatch_to_clerk;
-    insert into public.notifications
-      (tenant_id, channel, recipient, recipient_user, subject, body, template_key, context)
-    values (
+    perform public.queue_notification(
       c.tenant_id, 'in_app', coalesce(clerk_email, 'clerk'), c.dispatch_to_clerk,
       'Card ready for dispatch',
       format('Card %s for %s %s is printed and assigned to you for dispatch.',

@@ -121,12 +121,28 @@ export async function loadContext() {
   state.settings = {};
   if (!state.session?.user?.id) return;
 
-  const { data: profile, error } = await state.client
+  // The platform role lives in `platform_role` when MACOKASA was adopted
+  // into a project that already had a profiles table (SmartROSAF), and in
+  // `role` on a fresh project. Try the former, fall back to the latter.
+  let profile = null;
+  const adopted = await state.client
     .from("profiles")
-    .select("id, tenant_id, full_name, phone, role, district, is_active")
+    .select("id, tenant_id, full_name, phone, platform_role, district, is_active")
     .eq("id", state.session.user.id)
     .maybeSingle();
-  if (error || !profile) return;
+
+  if (!adopted.error && adopted.data) {
+    profile = { ...adopted.data, role: adopted.data.platform_role };
+  } else {
+    const plain = await state.client
+      .from("profiles")
+      .select("id, tenant_id, full_name, phone, role, district, is_active")
+      .eq("id", state.session.user.id)
+      .maybeSingle();
+    if (plain.error || !plain.data) return;
+    profile = plain.data;
+  }
+
   state.profile = profile;
   if (!profile.tenant_id) return;
 
