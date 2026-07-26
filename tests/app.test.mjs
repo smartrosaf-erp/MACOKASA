@@ -626,4 +626,65 @@ test("no shared module branches on tenant identity", () => {
   assert.match(guard, /isMacokasa/);
 });
 
+/* ---------------- Configuration UI ---------------- */
+
+console.log("\nConfiguration without a developer");
+
+const settingsSrc = read("screens/settings.js");
+const domSrc = read("lib/dom.js");
+
+test("formData reads any container, not only a form element", () => {
+  // The config screens group fields in a div. FormData throws on those,
+  // which silently broke every save button on those tabs.
+  assert.ok(!/new FormData\(/.test(domSrc), "must not depend on FormData");
+  assert.match(domSrc, /querySelectorAll\("input\[name\], select\[name\], textarea\[name\]"\)/);
+});
+
+test("formData returns booleans for checkboxes", () => {
+  assert.match(domSrc, /el\.type === "checkbox"/);
+  assert.match(domSrc, /add\(el\.name, el\.checked\)/);
+});
+
+test("an administrator can configure all four seams", () => {
+  for (const tabKey of ["branding", "terminology", "fields", "workflow"]) {
+    assert.ok(settingsSrc.includes(`key: "${tabKey}"`), `settings has no ${tabKey} tab`);
+  }
+});
+
+test("every configuration tab can be saved", () => {
+  for (const act of ["save-branding", "save-terms", "save-fields", "save-workflow"]) {
+    assert.ok(settingsSrc.includes(act), `no handler for ${act}`);
+  }
+});
+
+test("branding colours are validated before saving", () => {
+  assert.match(settingsSrc, /const HEX = \/\^#\[0-9a-fA-F\]\{6\}\$\//);
+  assert.match(settingsSrc, /must be a six digit hex colour/);
+});
+
+test("custom field keys are derived safely from the label", () => {
+  assert.match(settingsSrc, /replace\(\/\[\^a-z0-9\]\+\/g, "_"\)/);
+  assert.match(settingsSrc, /\^\[a-z\]\[a-z0-9_\]\{1,40\}\$/);
+});
+
+test("retiring a field keeps the values already captured", () => {
+  assert.match(api, /function retireCustomField/);
+  assert.match(api, /is_active: false/);
+  assert.ok(!/from\("custom_fields"\)[\s\S]{0,60}\.delete\(\)/.test(api),
+    "custom fields must never be hard deleted");
+  assert.match(settingsSrc, /Values already recorded against it are kept/);
+});
+
+test("weakening a money control requires confirmation", () => {
+  assert.match(settingsSrc, /Weaken a money control\?/);
+  assert.match(settingsSrc, /allowSelfConfirm.*\|\|.*allowSelfVerify|allowSelfConfirm"\)\s*\|\|/s);
+  assert.match(settingsSrc, /danger: true/);
+});
+
+test("configuration edits refresh the interface immediately", () => {
+  assert.match(api, /export async function refreshTailoring/);
+  const saves = (settingsSrc.match(/api\.refreshTailoring\(\)/g) || []).length;
+  assert.ok(saves >= 4, `expected every save to refresh, found ${saves}`);
+});
+
 console.log(`\n${passed} assertion group(s) passed.\n`);

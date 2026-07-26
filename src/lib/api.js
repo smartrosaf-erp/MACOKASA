@@ -811,6 +811,204 @@ export async function createExpense(payload) {
   return run(table("expenses").insert(payload).select().single(), "Recording expense");
 }
 
+/* ---------------- Tenant tailoring: read and write ---------------- */
+
+/**
+ * Reload tailoring after an administrator edits it, so the change is
+ * visible without a page refresh.
+ */
+export async function refreshTailoring() {
+  if (DEMO) {
+    tenant.applyBranding(state.tenant);
+    tenant.loadTerms(demo.db.terminology || []);
+    tenant.loadFieldConfig(demo.db.fieldConfig || []);
+    tenant.loadCustomFields((demo.db.customFields || []).filter((c) => c.is_active !== false));
+    tenant.loadWorkflows((demo.db.workflows || []).filter((w) => w.is_active !== false));
+    return;
+  }
+  if (state.profile?.tenant_id) await loadTailoring(state.profile.tenant_id);
+}
+
+export async function listTerminology() {
+  if (DEMO) return demo.db.terminology || [];
+  return run(
+    table("tenant_terminology").select("term_key, singular, plural").order("term_key"),
+    "Loading terminology"
+  );
+}
+
+export async function saveTerm({ termKey, singular, plural }) {
+  if (DEMO) {
+    demo.db.terminology = demo.db.terminology || [];
+    const row = demo.db.terminology.find((t) => t.term_key === termKey);
+    if (row) Object.assign(row, { singular, plural });
+    else demo.db.terminology.push({ term_key: termKey, singular, plural });
+    return { term_key: termKey, singular, plural };
+  }
+  return run(
+    table("tenant_terminology")
+      .upsert(
+        {
+          tenant_id: state.profile.tenant_id,
+          term_key: termKey,
+          singular,
+          plural,
+          updated_by: state.profile.id,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "tenant_id,term_key" }
+      )
+      .select()
+      .single(),
+    "Saving terminology"
+  );
+}
+
+export async function listFieldConfig(entity) {
+  if (DEMO) return (demo.db.fieldConfig || []).filter((f) => !entity || f.entity === entity);
+  let q = table("tenant_field_config")
+    .select("id, entity, field_key, visibility, label, help_text, sort_order")
+    .order("sort_order");
+  if (entity) q = q.eq("entity", entity);
+  return run(q, "Loading field settings");
+}
+
+export async function saveFieldConfig({ entity, fieldKey, visibility, label, helpText, sortOrder }) {
+  if (DEMO) {
+    demo.db.fieldConfig = demo.db.fieldConfig || [];
+    const row = demo.db.fieldConfig.find((f) => f.entity === entity && f.field_key === fieldKey);
+    const next = { entity, field_key: fieldKey, visibility, label, help_text: helpText, sort_order: sortOrder || 0 };
+    if (row) Object.assign(row, next);
+    else demo.db.fieldConfig.push(next);
+    return next;
+  }
+  return run(
+    table("tenant_field_config")
+      .upsert(
+        {
+          tenant_id: state.profile.tenant_id,
+          entity,
+          field_key: fieldKey,
+          visibility,
+          label: label || null,
+          help_text: helpText || null,
+          sort_order: sortOrder || 0,
+          updated_by: state.profile.id,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "tenant_id,entity,field_key" }
+      )
+      .select()
+      .single(),
+    "Saving field setting"
+  );
+}
+
+export async function listCustomFields(entity) {
+  if (DEMO) return (demo.db.customFields || []).filter((c) => !entity || c.entity === entity);
+  let q = table("custom_fields")
+    .select("id, entity, field_key, label, help_text, data_type, options, required, show_in_list, sort_order, is_active")
+    .order("sort_order");
+  if (entity) q = q.eq("entity", entity);
+  return run(q, "Loading custom fields");
+}
+
+export async function createCustomField(payload) {
+  if (DEMO) {
+    const row = { id: demo.uid("cf"), is_active: true, options: [], ...payload };
+    demo.db.customFields = demo.db.customFields || [];
+    demo.db.customFields.push(row);
+    return row;
+  }
+  return run(
+    table("custom_fields")
+      .insert({ tenant_id: state.profile.tenant_id, created_by: state.profile.id, ...payload })
+      .select()
+      .single(),
+    "Creating custom field"
+  );
+}
+
+export async function updateCustomField(id, payload) {
+  if (DEMO) {
+    const row = (demo.db.customFields || []).find((c) => c.id === id);
+    if (row) Object.assign(row, payload);
+    return row;
+  }
+  return run(table("custom_fields").update(payload).eq("id", id).select().single(), "Updating custom field");
+}
+
+/**
+ * Retiring a field never deletes it. Values already captured against it
+ * must remain readable, so the definition is deactivated instead.
+ */
+export async function retireCustomField(id) {
+  return updateCustomField(id, { is_active: false });
+}
+
+export async function listWorkflows() {
+  if (DEMO) return demo.db.workflows || [];
+  return run(
+    table("tenant_workflow").select("process_key, config, is_active").order("process_key"),
+    "Loading workflow settings"
+  );
+}
+
+export async function saveWorkflow(processKey, config) {
+  if (DEMO) {
+    demo.db.workflows = demo.db.workflows || [];
+    const row = demo.db.workflows.find((w) => w.process_key === processKey);
+    if (row) row.config = config;
+    else demo.db.workflows.push({ process_key: processKey, config, is_active: true });
+    return { process_key: processKey, config };
+  }
+  return run(
+    table("tenant_workflow")
+      .upsert(
+        {
+          tenant_id: state.profile.tenant_id,
+          process_key: processKey,
+          config,
+          updated_by: state.profile.id,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "tenant_id,process_key" }
+      )
+      .select()
+      .single(),
+    "Saving workflow setting"
+  );
+}
+
+export async function saveBranding(branding) {
+  if (DEMO) {
+    demo.db.tenant.branding = branding;
+    state.tenant = { ...state.tenant, branding };
+    return state.tenant;
+  }
+  const row = await run(
+    table("tenants")
+      .update({ branding, updated_at: new Date().toISOString() })
+      .eq("id", state.profile.tenant_id)
+      .select()
+      .single(),
+    "Saving branding"
+  );
+  state.tenant = row;
+  return row;
+}
+
+export async function listConfigHistory({ limit = 60 } = {}) {
+  if (DEMO) return [];
+  return run(
+    table("tenant_config_history")
+      .select("id, config_table, config_key, old_value, new_value, changed_by, changed_at")
+      .order("changed_at", { ascending: false })
+      .limit(limit),
+    "Loading configuration history"
+  );
+}
+
 /* ---------------- Tenant-defined field values ---------------- */
 
 export async function saveCustomValues(entity, recordId, values) {
