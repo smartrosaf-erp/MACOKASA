@@ -469,4 +469,42 @@ test("both tenants are seeded", () => {
   assert.match(adopt, /'macokasa'/);
 });
 
+
+const verifier = readFileSync(new URL("../supabase/migrations/0000b_verify_rosaf_untouched.sql", import.meta.url), "utf8");
+
+test("the post-migration verifier is read-only", () => {
+  for (const verb of ["insert into", "update ", "delete from", "drop ", "alter table", "create table", "truncate"]) {
+    assert.ok(!new RegExp(`\\n\\s*${verb}`, "i").test(verifier),
+      `verifier must not contain "${verb.trim()}"`);
+  }
+});
+
+test("the verifier checks RLS was not enabled on ROSAF tables", () => {
+  assert.match(verifier, /RLS enabled on a table MACOKASA did not create/);
+  assert.match(verifier, /rowsecurity = true/);
+});
+
+test("the verifier proves the ledger stays append-only", () => {
+  assert.match(verifier, /has_table_privilege\('authenticated'/);
+  assert.match(verifier, /ledger is append-only/);
+});
+
+test("the verifier proves the photo bucket is private", () => {
+  assert.match(verifier, /member-photos bucket is private/);
+});
+
+test("every check reports PASS or FAIL", () => {
+  const checks = (verifier.match(/as result/g) || []).length;
+  assert.ok(checks >= 8, `expected at least 8 checks, found ${checks}`);
+});
+
+test("the go-live guide rehearses on staging before production", () => {
+  const guide = readFileSync(new URL("../docs/GO-LIVE.md", import.meta.url), "utf8");
+  const staging = guide.indexOf("Phase 0");
+  const prod = guide.indexOf("Phase 5");
+  assert.ok(staging > -1 && prod > staging, "staging rehearsal must come before production");
+  assert.match(guide, /pg_restore/, "guide must document the rollback");
+  assert.match(guide, /Rehearse the rollback/, "the rollback itself must be rehearsed");
+});
+
 console.log(`\n${passed} assertion group(s) passed.\n`);
