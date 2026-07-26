@@ -17,9 +17,6 @@
 -- adoption path can be chosen deliberately.
 -- ============================================================
 
-\echo '=============================================='
-\echo ' MACOKASA preflight — inspecting existing schema'
-\echo '=============================================='
 
 -- ------------------------------------------------------------
 -- 1. Which shared object names already exist?
@@ -133,13 +130,13 @@ order by rowsecurity, tablename;
 
 select 'AUTH USERS' as finding, count(*) as total from auth.users;
 
-\echo ''
-\echo '=============================================='
-\echo ' HOW TO READ THIS'
-\echo '=============================================='
-\echo ' No TABLE COLLISION rows      -> run 0001..0004 unchanged.'
-\echo ' profiles collision only      -> run 0001a_adopt_existing_profiles.sql'
-\echo '                                 instead of the profiles part of 0001.'
-\echo ' Many collisions              -> STOP. Send this output back before'
-\echo '                                 running any migration.'
-\echo ''
+-- ------------------------------------------------------------
+-- HOW TO READ THIS
+--
+--   No TABLE COLLISION rows   -> run 0001, then 0002, 0003, 0004.
+--   Only profiles collides    -> run 0001a instead of 0001,
+--                                then 0002, 0003, 0004.
+--   Several collisions        -> STOP and review before running
+--                                any migration.
+-- ------------------------------------------------------------
+

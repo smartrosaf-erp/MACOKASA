@@ -9,7 +9,15 @@ except ImportError:
 ok = True
 for f in sorted(glob.glob("supabase/migrations/*.sql")):
     try:
-        n = len(pglast.parse_sql(open(f).read()))
+        src = open(f).read()
+        # psql client commands are not valid server-side SQL and are
+        # rejected by the Supabase SQL Editor, so flag them.
+        if any(l.strip().startswith("\\") for l in src.split("\n")):
+            print(f"  FAIL {f}\n       contains a psql client command; "
+                  f"the Supabase SQL Editor cannot run it")
+            ok = False
+            continue
+        n = len(pglast.parse_sql(src))
         print(f"  ok   {f}  ({n} statements)")
     except pglast.parser.ParseError as e:
         ok = False
