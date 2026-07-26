@@ -507,4 +507,123 @@ test("the go-live guide rehearses on staging before production", () => {
   assert.match(guide, /Rehearse the rollback/, "the rollback itself must be rehearsed");
 });
 
+/* ---------------- Tenant tailoring ---------------- */
+
+console.log("\nTailoring on one codebase");
+
+const ext = readFileSync(new URL("../supabase/migrations/0005_tenant_extensibility.sql", import.meta.url), "utf8");
+const tenantLib = read("lib/tenant.js");
+const registerSrc = read("screens/register.js");
+
+test("the four configuration seams exist", () => {
+  for (const table of ["tenant_terminology", "tenant_field_config", "custom_fields", "tenant_workflow"]) {
+    assert.match(ext, new RegExp(`create table if not exists public\\.${table}`), `${table} missing`);
+  }
+});
+
+test("custom field keys are constrained to safe identifiers", () => {
+  assert.match(ext, /custom_field_key_shape check \(field_key ~/);
+});
+
+test("configuration changes are recorded", () => {
+  assert.match(ext, /create table if not exists public\.tenant_config_history/);
+  assert.match(ext, /revoke update, delete on public\.tenant_config_history/);
+});
+
+test("every tailoring table is tenant scoped", () => {
+  for (const table of ["tenant_terminology", "tenant_field_config", "custom_fields", "custom_values", "tenant_workflow"]) {
+    const ddl = ext.match(new RegExp(`create table if not exists public\\.${table}[\\s\\S]*?\\n\\);`));
+    assert.ok(ddl, `${table} not found`);
+    assert.match(ddl[0], /tenant_id uuid not null references public\.tenants/, `${table} missing tenant_id`);
+  }
+});
+
+test("branding is applied, not merely stored", () => {
+  assert.match(tenantLib, /function applyBranding/);
+  assert.match(tenantLib, /setProperty\("--forest"/);
+  assert.match(api, /tenant\.applyBranding/);
+});
+
+test("a tenant that configures nothing still gets a working system", async () => {
+  // Exercise the real module rather than matching its source text.
+  global.document = {
+    documentElement: { style: { setProperty() {}, removeProperty() {} } },
+    querySelector: () => null
+  };
+  const lib = await import("../src/lib/tenant.js");
+  lib.resetTenantConfig();
+
+  assert.equal(lib.t("member"), "member", "unconfigured term falls back to the key");
+  assert.equal(lib.t("member", true), "members", "plural falls back sensibly");
+  assert.equal(lib.T("member"), "Member", "capitalised form works");
+  assert.equal(lib.fieldVisibility("member", "anything"), "optional", "fields default to optional");
+  assert.equal(lib.fieldHidden("member", "anything"), false);
+  assert.deepEqual(lib.customFieldsFor("member"), [], "no custom fields by default");
+  assert.equal(lib.validateCustom("member", {}), null, "nothing to validate");
+  assert.ok(lib.brand("primary"), "branding has a default colour");
+  assert.equal(lib.workflowFlag("payment_confirmation", "allowSelfConfirm", false), false);
+});
+
+test("configured terminology and field rules take effect", async () => {
+  const lib = await import("../src/lib/tenant.js");
+  lib.loadTerms([{ term_key: "member", singular: "associate", plural: "associates" }]);
+  assert.equal(lib.t("member"), "associate", "tenant vocabulary is used");
+  assert.equal(lib.t("member", true), "associates");
+
+  lib.loadFieldConfig([
+    { entity: "member", field_key: "national_id", visibility: "required", label: "ID number" }
+  ]);
+  assert.equal(lib.fieldRequired("member", "national_id"), true);
+  assert.equal(lib.fieldLabel("member", "national_id", "National ID"), "ID number");
+
+  lib.loadCustomFields([
+    { entity: "member", field_key: "sacco", label: "SACCO", data_type: "text", required: true, sort_order: 1 }
+  ]);
+  assert.equal(lib.customFieldsFor("member").length, 1);
+  assert.match(lib.validateCustom("member", {}), /SACCO is required/);
+  assert.equal(lib.validateCustom("member", { sacco: "Blantyre" }), null);
+
+  lib.loadCustomFields([
+    { entity: "member", field_key: "years", label: "Years", data_type: "number", required: false, sort_order: 1 }
+  ]);
+  assert.match(lib.validateCustom("member", { years: "abc" }), /must be a number/);
+  assert.deepEqual(lib.coerceCustom("member", { years: "7" }), { years: 7 }, "values are typed on save");
+
+  lib.resetTenantConfig();
+});
+
+test("interface text goes through the terminology layer", () => {
+  assert.match(tenantLib, /export function t\(/);
+  assert.match(registerSrc, /\$\{t\("member"\)\}/);
+});
+
+test("field visibility is honoured in the registration wizard", () => {
+  assert.match(registerSrc, /fieldHidden\("member", "national_id"\)/);
+  assert.match(registerSrc, /fieldRequired\("member", "national_id"\)/);
+});
+
+test("custom fields are rendered, validated and coerced", () => {
+  assert.match(registerSrc, /function customFieldsBlock/);
+  assert.match(registerSrc, /validateCustom\("member"/);
+  assert.match(registerSrc, /coerceCustom\("member"/);
+  assert.match(tenantLib, /export function validateCustom/);
+});
+
+test("custom values are stored as typed JSON, not new columns", () => {
+  assert.match(ext, /values jsonb not null default '\{\}'::jsonb/);
+  assert.match(api, /function saveCustomValues/);
+});
+
+test("workflow behaviour is configuration, not branching", () => {
+  assert.match(ext, /create or replace function public\.workflow\(/);
+  assert.match(tenantLib, /export function workflowFlag/);
+});
+
+test("no shared module branches on tenant identity", () => {
+  // The security check enforces this at build time; assert it is present.
+  const guard = readFileSync(new URL("../scripts/security-check.mjs", import.meta.url), "utf8");
+  assert.match(guard, /branches on tenant identity/);
+  assert.match(guard, /isMacokasa/);
+});
+
 console.log(`\n${passed} assertion group(s) passed.\n`);

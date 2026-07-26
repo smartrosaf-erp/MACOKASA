@@ -25,6 +25,7 @@ import {
 import { photoCaptureMarkup, bindPhotoCapture, stopCamera, dataUrlToBlob } from "../ui/photo.js";
 import { money, isValidPhone, normalisePhone, fullName } from "../lib/format.js";
 import * as api from "../lib/api.js";
+import { t, T, fieldHidden, fieldRequired, fieldLabel, customFieldsFor, validateCustom, coerceCustom } from "../lib/tenant.js";
 
 const STEPS = [
   { key: "type", label: "Operator type" },
@@ -63,6 +64,7 @@ function blankDraft() {
     licence_expiry: "",
     training_ref: "",
     photo_data: "",
+    custom: {},
     district_id: "",
     area_id: "",
     physical_address: "",
@@ -145,7 +147,7 @@ function stepType() {
   const pedal = draft.operator_type === "pedalist";
   return panel({
     eyebrow: "Step 1",
-    title: "What kind of member is this?",
+    title: `What kind of ${t("member")} is this?`,
     body: html`
       <p class="hint" style="margin-top:0">
         This sets the fees, the details collected, and the design of the ID card.
@@ -221,9 +223,16 @@ function stepIdentity() {
         <label class="field"><span>Date of birth</span>
           <input class="input" type="date" name="date_of_birth" value="${esc(draft.date_of_birth)}" />
         </label>
-        <label class="field"><span>National ID</span>
-          <input class="input" name="national_id" value="${esc(draft.national_id)}" autocomplete="off" />
-        </label>
+        ${
+          fieldHidden("member", "national_id")
+            ? ""
+            : html`<label class="field"><span>${esc(fieldLabel("member", "national_id", "National ID"))}${
+                fieldRequired("member", "national_id") ? " *" : ""
+              }</span>
+                <input class="input" name="national_id" value="${esc(draft.national_id)}"
+                  ${fieldRequired("member", "national_id") ? "required" : ""} autocomplete="off" />
+              </label>`
+        }
         <label class="field"><span>Phone *</span>
           <input class="input" name="phone" value="${esc(draft.phone)}" required placeholder="0991 234 567" inputmode="tel" />
           <span class="hint">Malawi mobile. Saved as +265…</span>
@@ -231,9 +240,16 @@ function stepIdentity() {
         <label class="field"><span>Alternative phone</span>
           <input class="input" name="alt_phone" value="${esc(draft.alt_phone)}" inputmode="tel" />
         </label>
-        <label class="field full"><span>Email</span>
-          <input class="input" type="email" name="email" value="${esc(draft.email)}" />
-        </label>
+        ${
+          fieldHidden("member", "email")
+            ? ""
+            : html`<label class="field full"><span>${esc(fieldLabel("member", "email", "Email"))}${
+                fieldRequired("member", "email") ? " *" : ""
+              }</span>
+                <input class="input" type="email" name="email" value="${esc(draft.email)}"
+                  ${fieldRequired("member", "email") ? "required" : ""} />
+              </label>`
+        }
 
         <fieldset class="field full">
           <legend>Next of kin</legend>
@@ -249,6 +265,8 @@ function stepIdentity() {
             </label>
           </div>
         </fieldset>
+
+        ${customFieldsBlock()}
 
         <fieldset class="field full">
           <legend>${pedal ? "Training" : "Licensing"}</legend>
@@ -281,6 +299,51 @@ function stepIdentity() {
 }
 
 /* ---------------- Step 3: photo ---------------- */
+
+/** Fields this tenant defined that the core has never heard of. */
+function customFieldsBlock() {
+  const defs = customFieldsFor("member");
+  if (!defs.length) return "";
+  return html`
+    <fieldset class="field full">
+      <legend>Additional details</legend>
+      <div class="form-grid">
+        ${defs
+          .map((d) => {
+            const value = esc(draft.custom?.[d.field_key] ?? "");
+            const req = d.required ? "required" : "";
+            const label = `${esc(d.label)}${d.required ? " *" : ""}`;
+            if (d.data_type === "boolean") {
+              return html`<label class="field full">
+                <label class="switch">
+                  <input type="checkbox" data-custom="${esc(d.field_key)}"
+                    ${draft.custom?.[d.field_key] ? "checked" : ""} />
+                  <span class="switch-track"></span><span>${label}</span>
+                </label>
+              </label>`;
+            }
+            if (d.data_type === "select") {
+              const opts = Array.isArray(d.options) ? d.options : [];
+              return html`<label class="field"><span>${label}</span>
+                <select class="select" data-custom="${esc(d.field_key)}" ${req}>
+                  <option value="">Select…</option>
+                  ${opts.map((o) => `<option value="${esc(o)}" ${value === o ? "selected" : ""}>${esc(o)}</option>`).join("")}
+                </select>
+              </label>`;
+            }
+            const type = d.data_type === "number" ? "number"
+              : d.data_type === "date" ? "date"
+              : d.data_type === "email" ? "email" : "text";
+            return html`<label class="field"><span>${label}</span>
+              <input class="input" type="${type}" data-custom="${esc(d.field_key)}" value="${value}" ${req} />
+              ${d.help_text ? `<span class="hint">${esc(d.help_text)}</span>` : ""}
+            </label>`;
+          })
+          .join("")}
+      </div>
+    </fieldset>
+  `;
+}
 
 function stepPhoto() {
   const required = api.setting("require_photo_on_registration", true);
@@ -696,6 +759,10 @@ function captureCurrentStep(root) {
     if (form) {
       Object.assign(draft, formData(form));
       draft.has_licence = Boolean(form.querySelector('[name="has_licence"]')?.checked);
+      draft.custom = draft.custom || {};
+      form.querySelectorAll("[data-custom]").forEach((el) => {
+        draft.custom[el.dataset.custom] = el.type === "checkbox" ? el.checked : el.value;
+      });
     }
   }
   if (key === "location") {
@@ -725,7 +792,13 @@ function validateStep(key) {
     if (!isValidPhone(draft.phone)) return "That phone number does not look like a Malawi mobile number.";
     if (draft.alt_phone && !isValidPhone(draft.alt_phone)) return "The alternative phone number is not valid.";
     if (draft.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(draft.email)) return "That email address is not valid.";
-    return null;
+    if (fieldRequired("member", "national_id") && !draft.national_id?.trim()) {
+      return `${fieldLabel("member", "national_id", "National ID")} is required.`;
+    }
+    if (fieldRequired("member", "email") && !draft.email?.trim()) {
+      return `${fieldLabel("member", "email", "Email")} is required.`;
+    }
+    return validateCustom("member", draft.custom || {});
   }
   if (key === "photo") {
     if (api.setting("require_photo_on_registration", true) && !draft.photo_data) {
@@ -844,6 +917,17 @@ async function save(rerender) {
       registered_by: api.state.profile.id,
       notes: draft.notes?.trim() || null
     });
+
+    // Tenant-defined fields, stored as typed JSON against the record.
+    const customValues = coerceCustom("member", draft.custom || {});
+    if (Object.keys(customValues).length) {
+      try {
+        await api.saveCustomValues("member", member.id, customValues);
+      } catch (error) {
+        console.error(error);
+        notify.warn("Member saved, but the additional details did not store.");
+      }
+    }
 
     // Photo upload is best effort: a failed upload must not lose the member.
     if (draft.photo_data) {

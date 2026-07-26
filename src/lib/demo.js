@@ -53,6 +53,10 @@ export const db = {
   expenses: [],
   notifications: [],
   session: null,
+  terminology: [],
+  fieldConfig: [],
+  customFields: [],
+  workflows: [],
   seq: { rct: 0, rmt: 0, qts: 0, exp: 0, card: 0, member: {} }
 };
 
@@ -138,9 +142,54 @@ export function seed() {
     status: "active",
     currency: "MWK",
     locale: "en-MW",
-    branding: {},
+    branding: {
+      displayName: "MACOKASA",
+      shortName: "MACOKASA",
+      tagline: "Kabaza Stakeholders Association",
+      logoUrl: "./assets/macokasa-logo.png",
+      primary: "#0a5236",
+      accent: "#c8901c",
+      ink: "#0c1512"
+    },
     settings: {}
   };
+
+  // Tailoring, seeded so the mechanism is visibly in use rather than
+  // merely available.
+  db.terminology = [
+    { term_key: "member", singular: "member", plural: "members" },
+    { term_key: "operator", singular: "operator", plural: "operators" },
+    { term_key: "owner", singular: "vehicle owner", plural: "vehicle owners" },
+    { term_key: "vehicle", singular: "vehicle", plural: "vehicles" },
+    { term_key: "card", singular: "identity card", plural: "identity cards" },
+    { term_key: "area", singular: "rank", plural: "ranks" },
+    { term_key: "organisation", singular: "Association", plural: "Associations" }
+  ];
+
+  db.fieldConfig = [
+    { entity: "member", field_key: "national_id", visibility: "optional", label: "National ID", sort_order: 5 },
+    { entity: "member", field_key: "email", visibility: "optional", label: "Email", sort_order: 7 },
+    { entity: "member", field_key: "kin_name", visibility: "optional", label: "Next of kin", sort_order: 8 }
+  ];
+
+  db.customFields = [
+    {
+      id: "cf-1", entity: "member", field_key: "rank_committee",
+      label: "Rank committee", data_type: "text", options: [],
+      required: false, show_in_list: false, sort_order: 1, is_active: true
+    },
+    {
+      id: "cf-2", entity: "member", field_key: "years_riding",
+      label: "Years riding", data_type: "number", options: [],
+      required: false, show_in_list: false, sort_order: 2, is_active: true
+    }
+  ];
+
+  db.workflows = [
+    { process_key: "payment_confirmation", config: { allowSelfConfirm: false, requiresSecondApproval: false, thresholdAmount: 0 }, is_active: true },
+    { process_key: "card_printing", config: { printOnce: true, reprintRole: "operations", sortBy: "district_area_clerk" }, is_active: true },
+    { process_key: "remittance", config: { allowSelfVerify: false, varianceToleranceAmount: 0 }, is_active: true }
+  ];
 
   db.users = STAFF.map((s) => ({ ...s, tenant_id: db.tenant.id, is_active: true, phone: null }));
 
