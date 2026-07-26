@@ -351,7 +351,7 @@ test("the site never claims figures it cannot prove", () => {
   assert.ok(!/[0-9],[0-9]{3}\+? (members|operators|riders)/i.test(site));
 });
 
-test("hidden beats display so only one tier panel shows", () => {
+test("hidden beats display so only one fee panel shows", () => {
   assert.match(css, /\[hidden\] \{ display: none !important; \}/);
 });
 
@@ -360,10 +360,42 @@ test("the burger only appears once the nav collapses", () => {
   assert.match(css, /\.burger \{ display: inline-flex !important; \}/);
 });
 
-test("site sections carry the ids the nav links to", () => {
-  for (const id of ["what", "how", "owners", "fees", "verify"]) {
-    assert.ok(site.includes(`id="${id}"`), `missing section #${id}`);
+test("every nav link resolves to a real page", () => {
+  // Each header link must be a routable page, not a scroll anchor.
+  const declared = [...site.matchAll(/data-page="(\w+)"/g)].map((m) => m[1]);
+  const pages = ["home", "about", "membership", "owners", "fees", "verify", "contact"];
+  for (const target of new Set(declared)) {
+    assert.ok(pages.includes(target), `nav points at unknown page: ${target}`);
   }
+  assert.match(site, /export const PAGES = \[/);
+});
+
+test("navigation opens pages rather than scrolling to anchors", () => {
+  // A jump-link implementation would call scrollIntoView on nav click.
+  assert.ok(!/onNavigate[\s\S]{0,200}scrollIntoView/.test(app),
+    "navigation must not scroll to an anchor");
+  assert.match(app, /function goToPage/);
+  assert.match(app, /window\.history\.pushState/);
+});
+
+test("each page has its own document title", () => {
+  assert.match(site, /export function pageTitle/);
+  assert.match(app, /document\.title = pageTitle\(sitePage\)/);
+});
+
+test("browser back and forward move between pages", () => {
+  assert.match(app, /addEventListener\("popstate"/);
+  assert.match(app, /function pageFromHash/);
+});
+
+test("changing page resets the scroll position", () => {
+  const fn = app.slice(app.indexOf("function goToPage"));
+  assert.match(fn.slice(0, 500), /window\.scrollTo\(\{ top: 0/);
+});
+
+test("the display face is an editorial serif", () => {
+  assert.match(css, /--display: "Source Serif 4"/);
+  assert.match(css, /--sans: "Inter"/);
 });
 
 console.log(`\n${passed} assertion group(s) passed.\n`);

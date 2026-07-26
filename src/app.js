@@ -19,7 +19,7 @@ import * as cards from "./screens/cards.js";
 import * as finance from "./screens/finance.js";
 import * as fleet from "./screens/fleet.js";
 import * as settings from "./screens/settings.js";
-import { renderSite, bindSite } from "./screens/site.js";
+import { renderSite, bindSite, pageTitle, PAGES } from "./screens/site.js";
 
 const root = document.querySelector("#app");
 
@@ -100,6 +100,9 @@ let sidebarOpen = false;
 let booting = true;
 /** Which face of the product is showing: the public site or the ERP. */
 let view = "site";
+let sitePage = "home";
+let verifyResult = null;
+let cachedTiers = null;
 
 /* ---------------- Boot ---------------- */
 
@@ -120,7 +123,11 @@ async function init() {
     return renderVerification(token);
   }
 
-  if (params.get("portal") === "1" || window.location.hash === "#portal") view = "portal";
+  if (params.get("portal") === "1" || window.location.hash === "#portal") {
+    view = "portal";
+  } else {
+    sitePage = pageFromHash();
+  }
 
   if (api.isConfigured()) {
     try {
@@ -141,15 +148,47 @@ async function init() {
 
 async function showSite() {
   const tiers = await publicTiers();
-  paint(renderSite({ tiers }));
+  paint(renderSite({ page: sitePage, tiers, verifyResult }));
+  document.title = pageTitle(sitePage);
+
   bindSite(document.querySelector("#app"), {
+    onNavigate: (page) => goToPage(page),
     onPortal: () => {
       view = "portal";
+      window.location.hash = "";
       void route();
       window.scrollTo({ top: 0 });
     },
-    onVerify: (token) => renderVerification(token)
+    onVerify: async (token) => {
+      try {
+        const result = await api.verifyCard(token);
+        verifyResult = result || { notFound: true };
+      } catch (error) {
+        verifyResult = { notFound: true, message: error.message };
+      }
+      sitePage = "verify";
+      await showSite();
+      document.querySelector(".verify-result")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   });
+}
+
+/** Each page is a real route with its own URL and a reset scroll position. */
+function goToPage(page) {
+  if (!PAGES.includes(page)) page = "home";
+  sitePage = page;
+  if (page !== "verify") verifyResult = null;
+  const target = `#/${page}`;
+  if (window.location.hash !== target) {
+    window.history.pushState({ page }, "", target);
+  }
+  void showSite();
+  window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+}
+
+function pageFromHash() {
+  const raw = String(window.location.hash || "").replace(/^#\/?/, "").split("?")[0];
+  return PAGES.includes(raw) ? raw : "home";
 }
 
 /**
@@ -157,6 +196,7 @@ async function showSite() {
  * than inventing figures if the database is unreachable.
  */
 async function publicTiers() {
+  if (cachedTiers) return cachedTiers;
   try {
     if (!api.state.client && !api.DEMO) return [];
     const [packages, fees] = await Promise.all([api.listPackages(), api.listPackageFees()]);
@@ -177,7 +217,8 @@ async function publicTiers() {
           };
         })
     );
-    return withBenefits.sort((a, b) => a.rank - b.rank);
+    cachedTiers = withBenefits.sort((a, b) => a.rank - b.rank);
+    return cachedTiers;
   } catch (error) {
     console.error(error);
     return [];
@@ -588,6 +629,8 @@ document.addEventListener("click", async (event) => {
     await api.signOut();
     current = "dashboard";
     view = "site";
+    sitePage = "home";
+    window.history.pushState({}, "", "#/home");
     notify.info("Signed out.");
     void route();
     window.scrollTo({ top: 0 });
@@ -596,6 +639,7 @@ document.addEventListener("click", async (event) => {
 
   if (act === "back-to-site") {
     view = "site";
+    window.history.pushState({}, "", `#/${sitePage}`);
     void route();
     window.scrollTo({ top: 0 });
     return;
@@ -653,6 +697,14 @@ document.addEventListener("submit", async (event) => {
     signingIn = false;
     await route();
   }
+});
+
+/* Back and forward move between pages, as on any normal website. */
+window.addEventListener("popstate", () => {
+  if (view !== "site") return;
+  sitePage = pageFromHash();
+  void showSite();
+  window.scrollTo({ top: 0 });
 });
 
 window.addEventListener("online", () => {
