@@ -104,6 +104,40 @@ if (existsSync(migDir)) {
   }
 }
 
+// --- 3c. No tenant-specific branching in shared code -----------------
+//
+// The whole multi-tenant promise dies the moment code asks which client
+// it is serving. Tailoring must come from configuration tables.
+{
+  const shared = ["src/lib", "src/ui", "src/screens"];
+  const forbidden = [
+    // Comparing a tenant slug to a literal.
+    /tenant[^\n]{0,30}(===|==|!==|!=)\s*["'](macokasa|smartrosaf|rosaf)["']/i,
+    /slug\s*(===|==)\s*["'](macokasa|smartrosaf|rosaf)["']/i,
+    /if\s*\([^)]*isMacokasa/i
+  ];
+  for (const dir of shared) {
+    const full = resolve(dir);
+    if (!existsSync(full)) continue;
+    const walk = (d) => {
+      for (const entry of readdirSync(d, { withFileTypes: true })) {
+        const path = resolve(d, entry.name);
+        if (entry.isDirectory()) { walk(path); continue; }
+        if (!entry.name.endsWith(".js")) continue;
+        // demo.js legitimately seeds one tenant's sample data.
+        if (entry.name === "demo.js") continue;
+        const body = readFileSync(path, "utf8");
+        for (const pattern of forbidden) {
+          if (pattern.test(body)) {
+            fail("tenancy", `${dir}/${entry.name} branches on tenant identity; use configuration instead`);
+          }
+        }
+      }
+    };
+    walk(full);
+  }
+}
+
 // --- 4. Secrets must not be committed --------------------------------
 if (existsSync(resolve(".env"))) {
   fail("env", ".env is present in the repository tree");

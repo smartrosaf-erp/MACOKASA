@@ -7,6 +7,7 @@
  */
 
 import * as demo from "./demo.js";
+import * as tenant from "./tenant.js";
 
 const config = window.MACOKASA_CONFIG || {};
 
@@ -62,6 +63,11 @@ export async function signIn(email, password) {
     state.tenant = demo.db.tenant;
     state.modules = new Set(demo.db.modules);
     state.settings = { ...demo.db.settings };
+    tenant.applyBranding(state.tenant);
+    tenant.loadTerms(demo.db.terminology || []);
+    tenant.loadFieldConfig(demo.db.fieldConfig || []);
+    tenant.loadCustomFields(demo.db.customFields || []);
+    tenant.loadWorkflows(demo.db.workflows || []);
     return state.profile;
   }
   const { data, error } = await state.client.auth.signInWithPassword({
@@ -77,6 +83,7 @@ export async function signIn(email, password) {
 export async function signOut() {
   if (DEMO) {
     demo.db.session = null;
+    tenant.resetTenantConfig();
     state.session = null;
     state.profile = null;
     state.tenant = null;
@@ -146,7 +153,7 @@ export async function loadContext() {
   state.profile = profile;
   if (!profile.tenant_id) return;
 
-  const [{ data: tenant }, { data: modules }, { data: settings }] = await Promise.all([
+  const [{ data: tenantRow }, { data: modules }, { data: settings }] = await Promise.all([
     state.client
       .from("tenants")
       .select("id, slug, name, status, currency, locale, branding, settings")
@@ -156,9 +163,41 @@ export async function loadContext() {
     state.client.from("tenant_settings").select("key, value").eq("tenant_id", profile.tenant_id)
   ]);
 
-  state.tenant = tenant || null;
+  state.tenant = tenantRow || null;
   if (modules) state.modules = new Set(modules.filter((m) => m.enabled).map((m) => m.module_key));
   if (settings) state.settings = Object.fromEntries(settings.map((s) => [s.key, s.value]));
+
+  await loadTailoring(profile.tenant_id);
+}
+
+/**
+ * Branding, vocabulary, field rules and workflow variants. Each is
+ * optional: a tenant that configures nothing gets the shipped defaults,
+ * so a missing table or an empty result is not an error.
+ */
+async function loadTailoring(tenantId) {
+  tenant.applyBranding(state.tenant);
+
+  const safe = async (table, columns) => {
+    try {
+      const { data, error } = await state.client.from(table).select(columns).eq("tenant_id", tenantId);
+      return error ? [] : data || [];
+    } catch {
+      return [];
+    }
+  };
+
+  const [terms, fieldCfg, custom, flows] = await Promise.all([
+    safe("tenant_terminology", "term_key, singular, plural"),
+    safe("tenant_field_config", "entity, field_key, visibility, label, help_text, sort_order"),
+    safe("custom_fields", "id, entity, field_key, label, help_text, data_type, options, required, show_in_list, sort_order, is_active"),
+    safe("tenant_workflow", "process_key, config, is_active")
+  ]);
+
+  tenant.loadTerms(terms);
+  tenant.loadFieldConfig(fieldCfg);
+  tenant.loadCustomFields(custom.filter((c) => c.is_active !== false));
+  tenant.loadWorkflows(flows.filter((f) => f.is_active !== false));
 }
 
 /* ---------------- Access helpers ---------------- */
@@ -770,6 +809,46 @@ export async function createExpense(payload) {
     return row;
   }
   return run(table("expenses").insert(payload).select().single(), "Recording expense");
+}
+
+/* ---------------- Tenant-defined field values ---------------- */
+
+export async function saveCustomValues(entity, recordId, values) {
+  if (DEMO) {
+    demo.db.customValues = demo.db.customValues || {};
+    demo.db.customValues[`${entity}:${recordId}`] = values;
+    return values;
+  }
+  return run(
+    table("custom_values")
+      .upsert(
+        {
+          tenant_id: state.profile.tenant_id,
+          entity,
+          record_id: recordId,
+          values,
+          updated_by: state.profile.id,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "tenant_id,entity,record_id" }
+      )
+      .select()
+      .single(),
+    "Saving additional details"
+  );
+}
+
+export async function getCustomValues(entity, recordId) {
+  if (DEMO) {
+    return (demo.db.customValues || {})[`${entity}:${recordId}`] || {};
+  }
+  const { data, error } = await table("custom_values")
+    .select("values")
+    .eq("entity", entity)
+    .eq("record_id", recordId)
+    .maybeSingle();
+  if (error) return {};
+  return data?.values || {};
 }
 
 /* ---------------- Notifications ---------------- */
